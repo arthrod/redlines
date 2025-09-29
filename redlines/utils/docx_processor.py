@@ -32,7 +32,12 @@ class DocxProcessingMethod(Enum):
 
 
 class DOCXProcessor:
-    """High-fidelity DOCX conversion pipeline with async orchestration."""
+    """High-fidelity DOCX conversion pipeline with async orchestration.
+
+    The processor supports both html4docx-driven rendering and a resilient
+    manual converter so that Markdown, HTML and text inputs can all be mapped to
+    DOCX without pulling in Microsoft Office automation.
+    """
 
     def __init__(
         self,
@@ -61,6 +66,7 @@ class DOCXProcessor:
         *,
         method: Optional[DocxProcessingMethod] = None,
     ) -> bytes:
+        """Render Markdown into DOCX, trying the configured backends in order."""
         async with self._semaphore:
             conversion_order = self._conversion_order(method)
             html = await self.markdown_processor.to_html(markdown_content, hard_wrap=True)
@@ -82,6 +88,7 @@ class DOCXProcessor:
         *,
         method: Optional[DocxProcessingMethod] = None,
     ) -> bytes:
+        """Convert HTML content to DOCX via html4docx or manual Markdown route."""
         async with self._semaphore:
             conversion_order = self._conversion_order(method)
             for approach in conversion_order:
@@ -103,17 +110,21 @@ class DOCXProcessor:
         *,
         method: Optional[DocxProcessingMethod] = None,
     ) -> bytes:
+        """Convert plain text to DOCX after normalising to Markdown."""
         markdown = await self.markdown_processor.from_text(text_content)
         return await self.markdown_to_docx(markdown, method=method)
 
     async def docx_to_markdown(self, payload: bytes) -> str:
+        """Extract Markdown from a DOCX payload using the shared processor."""
         return await self.markdown_processor.from_docx(payload)
 
     async def docx_to_text(self, payload: bytes) -> str:
+        """Return plain text extracted from a DOCX payload."""
         markdown = await self.docx_to_markdown(payload)
         return await self.markdown_processor.to_text(markdown)
 
     async def docx_to_html(self, payload: bytes) -> str:
+        """Return HTML extracted from a DOCX payload via Markdown rendering."""
         markdown = await self.docx_to_markdown(payload)
         return await self.markdown_processor.to_html(markdown)
 
@@ -144,6 +155,7 @@ class DOCXProcessor:
         return buffer.read()
 
     async def _markdown_to_docx_manual(self, markdown_text: str) -> bytes:
+        """Manual Markdown-to-DOCX fallback that mirrors typical legal formatting."""
         doc = Document()
         self.styles.configure_document(doc)
 

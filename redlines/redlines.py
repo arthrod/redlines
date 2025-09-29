@@ -149,11 +149,13 @@ class Redlines:
     # Conversion helpers
     # ------------------------------------------------------------------
     def set_source(self, value: Any, *, fmt: Optional[str] = None, metadata: Optional[dict[str, Any]] = None) -> None:
+        """Assign a new source value along with optional format and metadata hints."""
         self._pending_source_format = fmt
         self._pending_source_metadata = metadata
         self.source = value
 
     def set_test(self, value: Any, *, fmt: Optional[str] = None, metadata: Optional[dict[str, Any]] = None) -> None:
+        """Assign a new test value along with optional format and metadata hints."""
         self._pending_test_format = fmt
         self._pending_test_metadata = metadata
         self.test = value
@@ -167,12 +169,14 @@ class Redlines:
         metadata: Optional[dict[str, Any]] = None,
         asynchronous: bool = False,
     ) -> Any:
+        """Convert ``data`` between formats using the shared :class:`ConversionManager`."""
         manager = self._get_conversion_manager()
         if asynchronous:
             return manager.convert(data, source_format, target_format, metadata=metadata)
         return manager.convert_sync(data, source_format, target_format, metadata=metadata)
 
     def extract_text(self, data: Any, source_format: str, *, asynchronous: bool = False) -> Any:
+        """Extract plain text from ``data`` in ``source_format`` via the manager."""
         manager = self._get_conversion_manager()
         if asynchronous:
             return manager.extract_text(data, source_format)
@@ -325,6 +329,7 @@ class Redlines:
         default_format: Optional[str],
         default_metadata: Optional[dict[str, Any]],
     ) -> Tuple[Any, Optional[str], Optional[dict[str, Any]]]:
+        """Normalise user input into ``(content, format_hint, metadata)``."""
         fmt_hint = default_format
         metadata = default_metadata
         content = value
@@ -349,6 +354,7 @@ class Redlines:
         return content, fmt_hint, metadata
 
     def _coerce_to_text(self, value: Any, fmt_hint: Optional[str]) -> str:
+        """Return textual content for ``value``, leveraging converters when required."""
         if isinstance(value, Document):
             return value.text
         if fmt_hint:
@@ -366,6 +372,7 @@ class Redlines:
 
     @staticmethod
     def _build_styles(option: Any) -> Styles:
+        """Construct a :class:`Styles` instance from user input."""
         if isinstance(option, Styles):
             return option
         if isinstance(option, dict):
@@ -376,6 +383,7 @@ class Redlines:
         raise TypeError(msg)
 
     def _get_conversion_manager(self) -> ConversionManager:
+        """Return a cached :class:`ConversionManager`, creating one on demand."""
         if self.conversion_manager is None:
             self.conversion_manager = ConversionManager(styles=self.styles)
         return self.conversion_manager

@@ -663,12 +663,12 @@ async def process_normal_message(email_message: Message, msg_id: str) -> dict[st
                 elif not part.is_multipart():  # Avoid logging multipart containers
                     logger.debug(f'Skipping unhandled simple part: {content_type}')
 
-                # Final logging of processed message
-                logger.info(
-                    'Completed processing email: {} attachments, Body length: {} chars',
-                    len(parsed_data['attachments']),
-                    len(parsed_data.get('body', '')),  # Use .get for body in case it was never set
-                )
+            # Final logging of processed message
+            logger.info(
+                'Completed processing email: %s attachments, body length: %s chars',
+                len(parsed_data['attachments']),
+                len(parsed_data.get('body', '')),
+            )
             return parsed_data
         except Exception as e:
             logger.error(f'Error processing email: {e}')

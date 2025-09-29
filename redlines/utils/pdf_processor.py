@@ -22,7 +22,13 @@ logger = logging.getLogger(__name__)
 
 
 class PDFProcessor:
-    """Bidirectional PDF conversion with async orchestration and fallbacks."""
+    """Bidirectional PDF conversion with async orchestration and fallbacks.
+
+    The processor can render Markdown/HTML/text into PDFs while also extracting
+    Markdown or text from uploaded PDF payloads.  Multiple rendering backends
+    are supported (WeasyPrint and xhtml2pdf) and each conversion runs within a
+    bounded semaphore to avoid overwhelming the runtime.
+    """
 
     def __init__(
         self,
@@ -53,6 +59,7 @@ class PDFProcessor:
         metadata: Optional[dict[str, Any]] = None,
         prefer_backend: Optional[str] = None,
     ) -> bytes:
+        """Render Markdown into a PDF document."""
         html_fragment = await self.markdown_processor.to_html(markdown_content, hard_wrap=True)
         html_document = self.styles.build_html_document(html_fragment, metadata)
         return await self._html_document_to_pdf(html_document, prefer_backend)
@@ -65,6 +72,7 @@ class PDFProcessor:
         treat_as_fragment: bool = True,
         prefer_backend: Optional[str] = None,
     ) -> bytes:
+        """Transform HTML into PDF, optionally wrapping fragments with default styles."""
         if treat_as_fragment:
             html_document = self.styles.build_html_document(html_content, metadata)
         else:
@@ -78,6 +86,7 @@ class PDFProcessor:
         metadata: Optional[dict[str, Any]] = None,
         prefer_backend: Optional[str] = None,
     ) -> bytes:
+        """Convert plain text into PDF via Markdown normalisation."""
         markdown = await self.markdown_processor.from_text(text_content)
         return await self.markdown_to_pdf(markdown, metadata=metadata, prefer_backend=prefer_backend)
 
@@ -85,6 +94,7 @@ class PDFProcessor:
     # Extracting from PDF
     # ------------------------------------------------------------------
     async def pdf_to_markdown(self, payload: bytes) -> str:
+        """Extract Markdown content from a PDF payload."""
         markdown = await self.markdown_processor.from_pdf(payload)
         if not markdown.strip():
             msg = 'Unable to extract textual content from PDF payload.'
@@ -92,12 +102,14 @@ class PDFProcessor:
         return markdown
 
     async def pdf_to_text(self, payload: bytes) -> str:
+        """Extract plain text from a PDF payload."""
         markdown = await self.pdf_to_markdown(payload)
         return await self.markdown_processor.to_text(markdown)
 
     async def pdf_to_html(
         self, payload: bytes, *, metadata: Optional[dict[str, Any]] = None
     ) -> str:
+        """Extract HTML from a PDF payload by way of Markdown rendering."""
         markdown = await self.pdf_to_markdown(payload)
         html_fragment = await self.markdown_processor.to_html(markdown, hard_wrap=True)
         return self.styles.build_html_document(html_fragment, metadata)

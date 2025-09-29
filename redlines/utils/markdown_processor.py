@@ -56,16 +56,18 @@ MISTUNE_PLUGINS = [
 
 
 class MarkdownProcessor:
-    """Convert to/from markdown using high-fidelity pipelines.
+    """Convert to and from Markdown using high-fidelity pipelines.
 
-    The implementation follows the legacy document converter/email_utils logic but removes
-    product-specific branding and improves fallbacks. All potentially blocking operations
-    run under an asyncio semaphore with ``asyncio.to_thread`` to avoid blocking callers.
+    The processor mirrors the behaviour of the original monolithic converter but
+    exposes the building blocks as reusable pieces. Every potentially blocking
+    operation is funnelled through :func:`asyncio.to_thread` so callers keep
+    their event loops responsive.
     """
 
     def __init__(
         self, *, enable_docling: bool = True, enable_markitdown: bool = True, max_concurrent_tasks: int = 6
     ) -> None:
+        """Initialise the processor with optional extraction backends."""
         self.enable_docling = enable_docling and DocumentConverter is not None and DocumentStream is not None
         self.enable_markitdown = enable_markitdown and markitdown is not None
         self._semaphore = asyncio.Semaphore(max_concurrent_tasks)
@@ -75,6 +77,7 @@ class MarkdownProcessor:
     # Markdown renderers
     # ------------------------------------------------------------------
     async def to_html(self, markdown_content: str, *, hard_wrap: bool = True) -> str:
+        """Render Markdown into HTML, honouring optional hard wrap behaviour."""
         renderer = (
             mistune.create_markdown(renderer=mistune.HTMLRenderer(), plugins=MISTUNE_PLUGINS, hard_wrap=True)
             if hard_wrap
@@ -84,11 +87,13 @@ class MarkdownProcessor:
         return result if isinstance(result, str) else str(result)
 
     async def to_text(self, markdown_content: str) -> str:
+        """Return a plain-text representation of ``markdown_content``."""
         html = await self.to_html(markdown_content)
         soup = BeautifulSoup(html, 'html.parser')
         return soup.get_text('\n', strip=True)
 
     async def from_html(self, html_content: str) -> str:
+        """Convert HTML into Markdown using :mod:`markdownify`."""
         if markdownify is None:
             msg = 'markdownify is required for HTML to Markdown conversion'
             raise RuntimeError(msg)
@@ -101,6 +106,7 @@ class MarkdownProcessor:
         return text_content.replace('\r\n', '\n').replace('\r', '\n')
 
     async def from_docx(self, payload: bytes) -> str:
+        """Extract Markdown from a DOCX payload using progressive fallbacks."""
         async with self._semaphore:
             text = await self._docling_to_markdown(payload, 'document.docx')
             if text:
@@ -120,6 +126,7 @@ class MarkdownProcessor:
         return ''
 
     async def from_pdf(self, payload: bytes) -> str:
+        """Extract Markdown from a PDF payload using progressive fallbacks."""
         async with self._semaphore:
             text = await self._docling_to_markdown(payload, 'document.pdf')
             if text:
@@ -134,6 +141,7 @@ class MarkdownProcessor:
     # Internal helpers
     # ------------------------------------------------------------------
     async def _docling_to_markdown(self, payload: bytes, name: str) -> Optional[str]:
+        """Try Docling for structured extraction, returning ``None`` when unavailable."""
         if not self.enable_docling or DocumentConverter is None or DocumentStream is None:
             return None
 
@@ -161,6 +169,7 @@ class MarkdownProcessor:
         return None
 
     async def _markitdown_to_markdown(self, payload: bytes) -> Optional[str]:
+        """Fallback to :mod:`markitdown` for lightweight conversions."""
         if not self.enable_markitdown:
             return None
         if markitdown is None:
@@ -177,6 +186,7 @@ class MarkdownProcessor:
         return None
 
     async def _python_docx_to_markdown(self, payload: bytes) -> str:
+        """Final DOCX fallback using :mod:`python-docx` when other tools fail."""
         if PythonDocxDocument is None:  # pragma: no cover - defensive
             return ''
 

@@ -22,6 +22,11 @@ class Format(Enum):
 
     @classmethod
     def normalize(cls, value: str) -> Format:
+        """Return the canonical :class:`Format` for the provided string alias.
+
+        The helper accepts MIME types and common shorthands (``pdf``, ``text/html`` etc.)
+        so that higher-level APIs can stay forgiving about user input.
+        """
         aliases = {
             'txt': cls.TEXT,
             'text': cls.TEXT,
@@ -46,7 +51,14 @@ class Format(Enum):
 
 
 class ConversionManager:
-    """Coordinate document conversions using specialised processors."""
+    """Coordinate document conversions using specialised processors.
+
+    The manager centralises the orchestration logic so callers interact with a
+    single facade instead of juggling the PDF, HTML, DOCX and Markdown
+    processors individually.  All conversions go through Markdown as the pivot
+    format which keeps the cross-product of conversions manageable and easy to
+    reason about.
+    """
 
     def __init__(
         self,
@@ -89,12 +101,19 @@ class ConversionManager:
         *,
         metadata: Optional[dict[str, Any]] = None,
     ) -> Any:
+        """Convert ``data`` from ``source_format`` to ``target_format`` asynchronously.
+
+        All heavy lifting is delegated to the specialised processors.  The
+        method normalises the requested formats and funnels the content through
+        Markdown, which acts as the canonical intermediate representation.
+        """
         src_fmt = Format.normalize(source_format)
         tgt_fmt = Format.normalize(target_format)
         markdown = await self._to_markdown(data, src_fmt)
         return await self._from_markdown(markdown, tgt_fmt, metadata)
 
     async def extract_text(self, data: Any, source_format: str) -> str:
+        """Return plain text extracted from ``data`` in ``source_format``."""
         src_fmt = Format.normalize(source_format)
         markdown = await self._to_markdown(data, src_fmt)
         return await self.markdown_processor.to_text(markdown)
@@ -107,15 +126,22 @@ class ConversionManager:
         *,
         metadata: Optional[dict[str, Any]] = None,
     ) -> Any:
+        """Blocking wrapper around :meth:`convert` using :func:`asyncio.run`.
+
+        The helper allows synchronous code paths (tests, CLI) to reuse the same
+        conversion logic without having to manage an event loop explicitly.
+        """
         return self._run_sync(self.convert(data, source_format, target_format, metadata=metadata))
 
     def extract_text_sync(self, data: Any, source_format: str) -> str:
+        """Blocking variant of :meth:`extract_text`."""
         return self._run_sync(self.extract_text(data, source_format))
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
     async def _to_markdown(self, data: Any, fmt: Format) -> str:
+        """Convert ``data`` in ``fmt`` to Markdown, dispatching to processors."""
         if fmt is Format.MARKDOWN:
             return self._ensure_text(data)
         if fmt is Format.TEXT:
@@ -136,6 +162,7 @@ class ConversionManager:
     async def _from_markdown(
         self, markdown: str, fmt: Format, metadata: Optional[dict[str, Any]]
     ) -> Any:
+        """Generate the desired format ``fmt`` from a Markdown string."""
         if fmt is Format.MARKDOWN:
             return markdown
         if fmt is Format.TEXT:
@@ -151,6 +178,7 @@ class ConversionManager:
 
     @staticmethod
     def _ensure_text(data: Any) -> str:
+        """Coerce ``data`` into text, reading from paths when required."""
         if isinstance(data, str):
             path = Path(data)
             if path.exists():
@@ -165,6 +193,7 @@ class ConversionManager:
 
     @staticmethod
     def _ensure_bytes(data: Any, fmt: Format) -> bytes:
+        """Return ``data`` as raw bytes, loading from disk if a path is provided."""
         if isinstance(data, bytes):
             return data
         if isinstance(data, (str, Path)):
@@ -176,6 +205,7 @@ class ConversionManager:
 
     @staticmethod
     def _run_sync(coro):
+        """Execute ``coro`` from synchronous code, preserving event loop safety."""
         try:
             asyncio.get_running_loop()
         except RuntimeError:
