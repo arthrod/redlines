@@ -32,6 +32,11 @@ try:
 except ImportError:  # pragma: no cover
     markdownify = None
 
+try:
+    from docx import Document as PythonDocxDocument
+except ImportError:  # pragma: no cover - optional dependency path
+    PythonDocxDocument = None
+
 
 logger = logging.getLogger(__name__)
 
