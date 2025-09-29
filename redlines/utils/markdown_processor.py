@@ -108,6 +108,14 @@ class MarkdownProcessor:
             text = await self._markitdown_to_markdown(payload)
             if text:
                 return text
+            if PythonDocxDocument is not None:
+                text = await self._python_docx_to_markdown(payload)
+                if text:
+                    return text
+        if PythonDocxDocument is not None:
+            fallback = await self._python_docx_to_markdown(payload)
+            if fallback.strip():
+                return fallback
         logger.warning('Falling back to empty result for DOCX payload - upstream extractors unavailable')
         return ''
 
@@ -126,7 +134,7 @@ class MarkdownProcessor:
     # Internal helpers
     # ------------------------------------------------------------------
     async def _docling_to_markdown(self, payload: bytes, name: str) -> Optional[str]:
-        if not self.enable_docling:
+        if not self.enable_docling or DocumentConverter is None or DocumentStream is None:
             return None
 
         try:
@@ -167,3 +175,20 @@ class MarkdownProcessor:
         except Exception as exc:  # pragma: no cover - optional dependency path
             logger.debug('MarkItDown conversion failed: %s', exc)
         return None
+
+    async def _python_docx_to_markdown(self, payload: bytes) -> str:
+        if PythonDocxDocument is None:  # pragma: no cover - defensive
+            return ''
+
+        def _extract() -> str:
+            doc_class = PythonDocxDocument  # Added for type safety
+            assert doc_class is not None, 'PythonDocxDocument is None'
+            document = doc_class(BytesIO(payload))
+            lines: list[str] = []
+            for paragraph in document.paragraphs:
+                text = paragraph.text.strip()
+                if text:
+                    lines.append(text)
+            return '\n\n'.join(lines)
+
+        return await asyncio.to_thread(_extract)
