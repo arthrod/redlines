@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import re
-
 from rich.text import Text
 
 from redlines.document import Document
-from redlines.processor import WholeDocumentProcessor, Redline
+from redlines.processor import Redline, WholeDocumentProcessor
 
 
 class Redlines:
@@ -16,13 +14,11 @@ class Redlines:
 
     @property
     def source(self) -> str:
-        """
-        :return: The source text to be used as a basis for comparison.
-        """
+        """:return: The source text to be used as a basis for comparison."""
         return self._source
 
     @source.setter
-    def source(self, value):
+    def source(self, value) -> None:
         self._source = value.text if isinstance(value, Document) else value
 
         # If test is already set, process the new source against it
@@ -35,7 +31,7 @@ class Redlines:
         return self._test
 
     @test.setter
-    def test(self, value):
+    def test(self, value) -> None:
         self._test = value.text if isinstance(value, Document) else value
 
         # Process the text against the source
@@ -44,22 +40,17 @@ class Redlines:
 
     @property
     def redlines(self) -> list[Redline]:
-        """
-        Return the list of Redline objects representing the changes from source to test.
+        """Return the list of Redline objects representing the changes from source to test.
 
         :return: List of Redline objects
         """
         if self._redlines is None:
-            raise ValueError(
-                "No test string was provided when the function was called, or during initialisation."
-            )
+            msg = 'No test string was provided when the function was called, or during initialisation.'
+            raise ValueError(msg)
         return self._redlines
 
-    def __init__(
-        self, source: str | Document, test: str | Document | None = None, **options
-    ):
-        """
-        Redline is a class used to compare text, and producing human-readable differences or deltas
+    def __init__(self, source: str | Document, test: str | Document | None = None, **options) -> None:
+        """Redline is a class used to compare text, and producing human-readable differences or deltas
         which look like track changes in Microsoft Word.
 
         ```python
@@ -67,10 +58,7 @@ class Redlines:
         from redlines import Redlines
 
         # Create a Redlines object using the two strings to compare
-        test = Redlines(
-            "The quick brown fox jumps over the lazy dog.",
-            "The quick brown fox walks past the lazy dog.",
-        )
+        test = Redlines('The quick brown fox jumps over the lazy dog.', 'The quick brown fox walks past the lazy dog.')
 
         # This produces an output in Markdown format
         test.output_markdown
@@ -81,15 +69,14 @@ class Redlines:
         ```python
         from redlines import PlainTextFile
 
-        source = PlainTextFile("tests/documents/PlainTextFile/source.txt")
-        test = PlainTextFile("tests/documents/PlainTextFile/test.txt")
+        source = PlainTextFile('tests/documents/PlainTextFile/source.txt')
+        test = PlainTextFile('tests/documents/PlainTextFile/test.txt')
 
         redline = Redlines(source, test)
         assert (
             redline.output_markdown
             == "The quick brown fox <span style='color:red;font-weight:700;text-decoration:line-through;'>jumps over </span><span style='color:green;font-weight:700;'>walks past </span>the lazy dog."
         )
-
         ```
 
         :param source: The source text to be used as a basis for comparison.
@@ -105,8 +92,7 @@ class Redlines:
 
     @property
     def opcodes(self) -> list[tuple[str, int, int, int, int]]:
-        """
-        Return list of 5-tuples describing how to turn `source` into `test`.
+        """Return list of 5-tuples describing how to turn `source` into `test`.
         Similar to [`SequenceMatcher.get_opcodes`](https://docs.python.org/3/library/difflib.html#difflib.SequenceMatcher.get_opcodes).
 
         ```pycon
@@ -121,8 +107,7 @@ class Redlines:
 
     @property
     def output_markdown(self) -> str:
-        """
-        Returns the delta in Markdown format.
+        """Returns the delta in Markdown format.
 
         ## Styling Markdown
         To output markdown in a particular manner, you must pass a `markdown_style` option when the `Redlines` object
@@ -132,12 +117,12 @@ class Redlines:
         from redlines import Redlines
 
         test = Redlines(
-            "The quick brown fox jumps over the lazy dog.",
-            "The quick brown fox walks past the lazy dog.",
-            markdown_style="red"  # This option specifies the style as red
+            'The quick brown fox jumps over the lazy dog.',
+            'The quick brown fox walks past the lazy dog.',
+            markdown_style='red',  # This option specifies the style as red
         )
 
-        test.compare(markdown_style="none") # This option specifies the style as none
+        test.compare(markdown_style='none')  # This option specifies the style as none
         ```
 
         ### Available styles
@@ -194,107 +179,69 @@ class Redlines:
         # default_style = "red_green"
 
         md_styles = {
-            "ins": (
-                f"<span style='color:green;font-weight:700;'>",
-                "</span>",
-            ),
-            "del": (
-                f"<span style='color:red;font-weight:700;text-decoration:line-through;'>",
-                "</span>",
-            ),
+            'ins': ("<span style='color:green;font-weight:700;'>", '</span>'),
+            'del': ("<span style='color:red;font-weight:700;text-decoration:line-through;'>", '</span>'),
         }
 
-        if "markdown_style" in self.options:
-            style = self.options["markdown_style"]
+        if 'markdown_style' in self.options:
+            style = self.options['markdown_style']
 
-            if style == "none" or style is None:
-                md_styles = {"ins": ("<ins>", "</ins>"), "del": ("<del>", "</del>")}
-            elif style == "red":
+            if style == 'none' or style is None:
+                md_styles = {'ins': ('<ins>', '</ins>'), 'del': ('<del>', '</del>')}
+            elif style == 'red':
                 md_styles = {
-                    "ins": (
-                        f"<span style='color:red;font-weight:700;'>",
-                        "</span>",
-                    ),
-                    "del": (
-                        f"<span style='color:red;font-weight:700;text-decoration:line-through;'>",
-                        "</span>",
-                    ),
+                    'ins': ("<span style='color:red;font-weight:700;'>", '</span>'),
+                    'del': ("<span style='color:red;font-weight:700;text-decoration:line-through;'>", '</span>'),
                 }
-            elif style == "custom_css":
-                ins_class = (
-                    self.options["ins_class"]
-                    if "ins_class" in self.options
-                    else "redline-inserted"
-                )
-                del_class = (
-                    self.options["del_class"]
-                    if "del_class" in self.options
-                    else "redline-deleted"
-                )
+            elif style == 'custom_css':
+                ins_class = self.options.get('ins_class', 'redline-inserted')
+                del_class = self.options.get('del_class', 'redline-deleted')
 
-                elem_attributes = {
-                    "ins": f"class='{ins_class}'",
-                    "del": f"class='{del_class}'",
-                }
+                elem_attributes = {'ins': f"class='{ins_class}'", 'del': f"class='{del_class}'"}
 
                 md_styles = {
-                    "ins": (
-                        f"<span {elem_attributes['ins']}>",
-                        "</span>",
-                    ),
-                    "del": (
-                        f"<span {elem_attributes['del']}>",
-                        "</span>",
-                    ),
+                    'ins': (f'<span {elem_attributes["ins"]}>', '</span>'),
+                    'del': (f'<span {elem_attributes["del"]}>', '</span>'),
                 }
-            elif style == "ghfm":
-                md_styles = {"ins": ("**", "**"), "del": ("~~", "~~")}
-            elif style == "bbcode":
-                md_styles = {
-                    "ins": ("[b][color=green]", "[/color][/b]"),
-                    "del": ("[s][color=red]", "[/color][/s]"),
-                }
-            elif style == "streamlit":
-                md_styles = {"ins": ("**:green[", "]** "), "del": ("~~:red[", "]~~ ")}
+            elif style == 'ghfm':
+                md_styles = {'ins': ('**', '**'), 'del': ('~~', '~~')}
+            elif style == 'bbcode':
+                md_styles = {'ins': ('[b][color=green]', '[/color][/b]'), 'del': ('[s][color=red]', '[/color][/s]')}
+            elif style == 'streamlit':
+                md_styles = {'ins': ('**:green[', ']** '), 'del': ('~~:red[', ']~~ ')}
 
         for redline in self.redlines:
             tag, i1, i2, j1, j2 = redline.opcodes
             source_tokens = redline.source_chunk.text
             test_tokens = redline.test_chunk.text
 
-            if tag == "equal":
-                temp_str = "".join(source_tokens[i1:i2])
-                temp_str = re.sub("¶ ", "\n\n", temp_str)
+            if tag == 'equal':
+                temp_str = ''.join(source_tokens[i1:i2])
+                temp_str = temp_str.replace('¶ ', '\n\n')
                 # here we use '¶ ' instead of ' ¶ ', because the leading space will be included in the previous token,
                 # according to tokenizer = re.compile(r"((?:[^()\s]+|[().?!-])\s*)")
                 result.append(temp_str)
-            elif tag == "insert":
-                temp_str = "".join(test_tokens[j1:j2])
-                splits = re.split("¶ ", temp_str)
+            elif tag == 'insert':
+                temp_str = ''.join(test_tokens[j1:j2])
+                splits = temp_str.split('¶ ')
                 for split in splits:
-                    result.append(f"{md_styles['ins'][0]}{split}{md_styles['ins'][1]}")
-                    result.append("\n\n")
+                    result.extend((f'{md_styles["ins"][0]}{split}{md_styles["ins"][1]}', '\n\n'))
                 if len(splits) > 0:
                     result.pop()
-            elif tag == "delete":
-                result.append(
-                    f"{md_styles['del'][0]}{''.join(source_tokens[i1:i2])}{md_styles['del'][1]}"
-                )
+            elif tag == 'delete':
+                result.append(f'{md_styles["del"][0]}{"".join(source_tokens[i1:i2])}{md_styles["del"][1]}')
                 # for 'delete', we make no change, because otherwise there will be two times '\n\n' than the original
                 # text.
-            elif tag == "replace":
-                result.append(
-                    f"{md_styles['del'][0]}{''.join(source_tokens[i1:i2])}{md_styles['del'][1]}"
-                )
-                temp_str = "".join(test_tokens[j1:j2])
-                splits = re.split("¶ ", temp_str)
+            elif tag == 'replace':
+                result.append(f'{md_styles["del"][0]}{"".join(source_tokens[i1:i2])}{md_styles["del"][1]}')
+                temp_str = ''.join(test_tokens[j1:j2])
+                splits = temp_str.split('¶ ')
                 for split in splits:
-                    result.append(f"{md_styles['ins'][0]}{split}{md_styles['ins'][1]}")
-                    result.append("\n\n")
+                    result.extend((f'{md_styles["ins"][0]}{split}{md_styles["ins"][1]}', '\n\n'))
                 if len(splits) > 0:
                     result.pop()
 
-        return "".join(result)
+        return ''.join(result)
 
     @property
     def output_rich(self) -> Text:
@@ -306,29 +253,28 @@ class Redlines:
             source_tokens = redline.source_chunk.text
             test_tokens = redline.test_chunk.text
 
-            if tag == "equal":
-                temp_str = "".join(source_tokens[i1:i2])
-                temp_str = re.sub("¶ ", "\n\n", temp_str)
+            if tag == 'equal':
+                temp_str = ''.join(source_tokens[i1:i2])
+                temp_str = temp_str.replace('¶ ', '\n\n')
                 console_text.append(temp_str)
-            elif tag == "insert":
-                temp_str = "".join(test_tokens[j1:j2])
-                splits = re.split("¶ ", temp_str)
+            elif tag == 'insert':
+                temp_str = ''.join(test_tokens[j1:j2])
+                splits = temp_str.split('¶ ')
                 for split in splits:
-                    console_text.append(split, "green")
-            elif tag == "delete":
-                console_text.append("".join(source_tokens[i1:i2]), "strike red")
-            elif tag == "replace":
-                console_text.append("".join(source_tokens[i1:i2]), "strike red")
-                temp_str = "".join(test_tokens[j1:j2])
-                splits = re.split("¶ ", temp_str)
+                    console_text.append(split, 'green')
+            elif tag == 'delete':
+                console_text.append(''.join(source_tokens[i1:i2]), 'strike red')
+            elif tag == 'replace':
+                console_text.append(''.join(source_tokens[i1:i2]), 'strike red')
+                temp_str = ''.join(test_tokens[j1:j2])
+                splits = temp_str.split('¶ ')
                 for split in splits:
-                    console_text.append(split, "green")
+                    console_text.append(split, 'green')
 
         return console_text
 
-    def compare(self, test: str | None = None, output: str = "markdown", **options):
-        """
-        Compare `test` with `source`, and produce a delta in a format specified by `output`.
+    def compare(self, test: str | None = None, output: str = 'markdown', **options):
+        """Compare `test` with `source`, and produce a delta in a format specified by `output`.
 
         :param test: Optional test string to compare. If None, uses the test string provided during initialisation.
         :param output: The format which the delta should be produced. Currently, "markdown" and "rich" are supported. Defaults to "markdown".
@@ -344,12 +290,11 @@ class Redlines:
             else:
                 self.test = test
         elif self._test is None:
-            raise ValueError(
-                "No test string was provided when the function was called, or during initialisation."
-            )
+            msg = 'No test string was provided when the function was called, or during initialisation.'
+            raise ValueError(msg)
 
-        if output == "markdown":
+        if output == 'markdown':
             return self.output_markdown
-        elif output == "rich":
+        if output == 'rich':
             return self.output_rich
         return self.output_markdown

@@ -1,13 +1,15 @@
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import logging
 import warnings
 from enum import Enum
 from io import BytesIO
+from typing import TYPE_CHECKING
 
 import mistune
 from docx import Document
-from docx.document import Document as DocumentType
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_PARAGRAPH_ALIGNMENT
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
@@ -22,6 +24,9 @@ from mistune.plugins.task_lists import task_lists
 from mistune.plugins.url import url
 from weasyprint import HTML
 from xhtml2pdf import pisa
+
+if TYPE_CHECKING:
+    from docx.document import Document as DocumentType
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -640,7 +645,7 @@ def _apply_legal_formatting(
     for tbl in doc.tables:
         try:
             current_style_name = getattr(getattr(tbl, 'style', None), 'name', None)
-            if tbl.style is None or current_style_name in (None, 'Normal Table'):
+            if tbl.style is None or current_style_name in {None, 'Normal Table'}:
                 tbl.style = DOCX_DEFAULT_TABLE_STYLE
         except Exception:
             # If style lookup fails or style doesn't exist in template, skip silently

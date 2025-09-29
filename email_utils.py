@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import base64
 import datetime
@@ -18,6 +20,7 @@ from email.message import (
 from email.utils import format_datetime, make_msgid
 from io import BytesIO
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import aiosmtplib
 import markitdown
@@ -39,7 +42,6 @@ from src.cicero_mail_pydantic_ptbr.models.error_types import EmailDecodingError
 from src.cicero_mail_pydantic_ptbr.models.request_types import generate_json_safe_id
 from src.cicero_mail_pydantic_ptbr.utils.custom_logging import logger
 from src.cicero_mail_pydantic_ptbr.utils.datetime_format import get_serialized_nyc_now
-from zoneinfo import ZoneInfo
 
 
 def sanitize_filename(filename: str) -> str:
@@ -163,7 +165,7 @@ async def extract_text_from_pdf(payload: bytes) -> str:
             logger.warning(f'Markitdown failed to extract PDF text: {e}')
 
     # Return the extracted text or error message
-    return extracted_text if extracted_text else ATTACHMENT_PROCESSING_ERROR_MSG_TEMPLATE
+    return extracted_text or ATTACHMENT_PROCESSING_ERROR_MSG_TEMPLATE
 
 
 async def extract_text_from_docx(payload: bytes) -> str:
@@ -242,7 +244,7 @@ async def extract_text_from_docx(payload: bytes) -> str:
             logger.warning(f'Markitdown failed to extract DOCX text: {e}')
 
     # Return the extracted text or error message
-    return extracted_text if extracted_text else ATTACHMENT_PROCESSING_ERROR_MSG_TEMPLATE
+    return extracted_text or ATTACHMENT_PROCESSING_ERROR_MSG_TEMPLATE
 
 
 async def process_headers(email_message) -> dict:

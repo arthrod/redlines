@@ -1,5 +1,4 @@
-"""
-# Command line interface for redlines.
+"""# Command line interface for redlines.
 
 A command line interface for the redlines library that allows you to compare two strings
 and see the differences in the terminal.
@@ -76,19 +75,18 @@ click.rich_click.SHOW_ARGUMENTS = True
 
 @group()
 def print_intro():
-    """@private"""
+    """@private."""
     yield Text.from_markup(
-        f"\n[bold red]--__--[/] [b]Redlines CLI[/b] [magenta]v{version('redlines')}[/] [bold red]--__--[/]\n\n"
-        f"[dim]➡️ Showing differences in text in the terminal⬅️ \n "
-        f"[b]🏠 [link=https://github.com/houfu/redlines]Homepage[/][/]",
-        justify="center",
+        f'\n[bold red]--__--[/] [b]Redlines CLI[/b] [magenta]v{version("redlines")}[/] [bold red]--__--[/]\n\n'
+        f'[dim]➡️ Showing differences in text in the terminal⬅️ \n '
+        f'[b]🏠 [link=https://github.com/houfu/redlines]Homepage[/][/]',
+        justify='center',
     )
 
 
 @click.group()
-def cli():
-    """
-    [red on black]Redlines[/] shows the differences between two strings/text.
+def cli() -> None:
+    r"""[red on black]Redlines[/] shows the differences between two strings/text.
 
     The changes are represented with strike-throughs and underlines, which looks similar to Microsoft Word's
     track changes. This method of showing changes is more familiar to lawyers and is more compact for
@@ -98,45 +96,38 @@ def cli():
     \f
     @private
     """
-    pass
 
 
 @cli.command()
-@click.argument("source", required=True)
-@click.argument("test", required=True)
-def text(source, test):
-    """
-    Compares the strings SOURCE and TEST and produce a redline in the terminal in a display that shows the original, new and redlined text.
+@click.argument('source', required=True)
+@click.argument('test', required=True)
+def text(source, test) -> None:
+    r"""Compares the strings SOURCE and TEST and produce a redline in the terminal in a display that shows the original, new and redlined text.
 
     \f
     @private
     """
-
     redlines = Redlines(source, test)
 
     console = Console()
     layout = Layout()
     layout.split_column(
         Layout(print_intro()),
-        Layout(
-            Panel(redlines.output_rich, title="redline", title_align="left"),
-            name="redline",
-        ),
-        Layout(name="lower"),
+        Layout(Panel(redlines.output_rich, title='redline', title_align='left'), name='redline'),
+        Layout(name='lower'),
     )
-    layout["lower"].split_row(
-        Layout(Panel(source, title="Source", title_align="left"), name="source"),
-        Layout(Panel(test, title="Test", title_align="left"), name="test"),
+    layout['lower'].split_row(
+        Layout(Panel(source, title='Source', title_align='left'), name='source'),
+        Layout(Panel(test, title='Test', title_align='left'), name='test'),
     )
     console.print(layout)
 
 
 @cli.command()
-@click.argument("source", required=True)
-@click.argument("test", required=True)
-def simple_text(source, test):
-    """
-    Compares the strings SOURCE and TEST and outputs the redline in the terminal.
+@click.argument('source', required=True)
+@click.argument('test', required=True)
+def simple_text(source, test) -> None:
+    r"""Compares the strings SOURCE and TEST and outputs the redline in the terminal.
 
     \f
     @private
@@ -148,19 +139,18 @@ def simple_text(source, test):
 
 
 @cli.command()
-@click.argument("source", required=True)
-@click.argument("test", required=True)
+@click.argument('source', required=True)
+@click.argument('test', required=True)
 @click.option(
-    "markdown_style",
-    "--markdown-style",
-    "-m",
-    type=click.Choice(["red_green", "none", "red", "ghfm", "bbcode", "streamlit"]),
-    default="red_green",
-    help="The markdown style to use.",
+    'markdown_style',
+    '--markdown-style',
+    '-m',
+    type=click.Choice(['red_green', 'none', 'red', 'ghfm', 'bbcode', 'streamlit']),
+    default='red_green',
+    help='The markdown style to use.',
 )
-def markdown(source, test, markdown_style):
-    """
-    Compares the strings SOURCE and TEST and outputs the redline as a markdown.
+def markdown(source, test, markdown_style) -> None:
+    r"""Compares the strings SOURCE and TEST and outputs the redline as a markdown.
 
     \f
     @private
