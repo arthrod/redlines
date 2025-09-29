@@ -1,7 +1,31 @@
+import asyncio
+
 import pytest
 from rich.text import Text
 
 from redlines import Redlines
+
+
+class StubConversionManager:
+    def __init__(self) -> None:
+        self.extract_calls: list[tuple[str, str | bytes]] = []
+        self.convert_calls: list[tuple[str, str]] = []
+
+    def extract_text_sync(self, data, source_format):
+        self.extract_calls.append((source_format, data))
+        return f'{source_format}-text'
+
+    async def extract_text(self, data, source_format):  # pragma: no cover - invoked in async tests
+        self.extract_calls.append((f'async-{source_format}', data))
+        return f'async-{source_format}-text'
+
+    def convert_sync(self, data, source_format, target_format, *, metadata=None):
+        self.convert_calls.append((source_format, target_format))
+        return b'converted-sync'
+
+    async def convert(self, data, source_format, target_format, *, metadata=None):  # pragma: no cover
+        self.convert_calls.append((f'async-{source_format}', target_format))
+        return b'converted-async'
 
 
 @pytest.mark.parametrize(
@@ -126,9 +150,9 @@ def test_compare() -> None:
 
 def test_opcodes_error() -> None:
     test_string_1 = 'The quick brown fox jumps over the lazy dog.'
-    Redlines(test_string_1)
+    redline = Redlines(test_string_1)
     with pytest.raises(ValueError):
-        pass
+        _ = redline.redlines
 
 
 def test_source() -> None:
@@ -199,6 +223,32 @@ def test_markdown_style() -> None:
     expected_md = 'The quick brown fox ~~:red[jumps over ]~~ **:green[walks past ]** the lazy dog.'
     test = Redlines(test_string_1, markdown_style='streamlit')
     assert test.compare(test_string_2) == expected_md
+
+
+def test_redlines_with_conversion_manager() -> None:
+    manager = StubConversionManager()
+    redline = Redlines(
+        {'content': b'PDFDATA', 'format': 'pdf'},
+        {'content': b'DOCXDATA', 'format': 'docx'},
+        conversion_manager=manager,
+        markdown_style='none',
+    )
+
+    assert redline.source == 'pdf-text'
+    assert redline.test == 'docx-text'
+    assert ('pdf', b'PDFDATA') in manager.extract_calls
+    assert ('docx', b'DOCXDATA') in manager.extract_calls
+
+    converted_sync = redline.convert('payload', 'txt', 'docx')
+    assert converted_sync == b'converted-sync'
+    assert ('txt', 'docx') in manager.convert_calls
+
+    async_extract = redline.extract_text('payload', 'md', asynchronous=True)
+    assert asyncio.run(async_extract) == 'async-md-text'
+
+    async_convert = redline.convert('payload', 'txt', 'pdf', asynchronous=True)
+    assert asyncio.run(async_convert) == b'converted-async'
+    assert ('async-txt', 'pdf') in manager.convert_calls
 
 
 def test_paragraphs_handling() -> None:

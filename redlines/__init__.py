@@ -65,7 +65,17 @@ The documentation contains other information on common issues users have faced w
 """
 
 from . import utils
+from .utils import ConversionManager, Styles
 from .document import *
 from .redlines import Redlines
 
-__all__ = ['Redlines', 'cli', 'document', 'processor', 'redlines', 'utils']
+__all__ = [
+    'ConversionManager',
+    'Redlines',
+    'Styles',
+    'cli',
+    'document',
+    'processor',
+    'redlines',
+    'utils',
+]

@@ -131,39 +131,46 @@ class Styles:
         header_html = self.config['header'].get('content', '') if self.config['header'].get('enabled') else ''
         footer_html = self.config['footer'].get('content', '') if self.config['footer'].get('enabled') else ''
 
-        return (
-            '<!DOCTYPE html>'
-            '<html>'
-            '<head>'
-            f'<meta charset="utf-8"><title>{title}</title>'
-            '<style>'
-            'body{margin:0;padding:0;font-family:'
-            f"'{font_cfg['name']}';font-size:{font_cfg['size']}pt;color:#000;}"
-            '.document-container{margin:0 auto;max-width:8.27in;padding:1in;box-sizing:border-box;}'
-            '.content p{line-height:'
-            f"{paragraph_cfg.get('line_spacing', 1.15)};margin-bottom:{paragraph_cfg.get('space_after_pts', 6)}pt;"
-            f'text-align:{justification_css};}}'
-            '.content table{border-collapse:collapse;width:100%;margin-bottom:12pt;}'
-            '.content th,.content td{border:1px solid #333;padding:6pt;text-align:left;}'
-            '.content code{font-family:"Courier New",monospace;font-size:10pt;background:#f5f5f5;padding:1pt 3pt;}'
-            '.content pre{background:#f5f5f5;padding:12pt;overflow-x:auto;}'
-            '.header,.footer{text-align:center;font-size:9pt;color:#555;}'
-            '.header{margin-bottom:12pt;}'
-            '.footer{margin-top:24pt;border-top:1px solid #ccc;padding-top:12pt;}'
-            + ''.join(heading_css)
-            + '</style>'
-            '</head>'
-            '<body>'
-            '<div class="document-container">'
-            + (f'<div class="header">{header_html}</div>' if header_html else '')
-            '<div class="content">'
-            f'{body}'
-            '</div>'
-            + (f'<div class="footer">{footer_html}</div>' if footer_html else '')
-            '</div>'
-            '</body>'
-            '</html>'
+        parts = [
+            '<!DOCTYPE html>',
+            '<html>',
+            '<head>',
+            f'<meta charset="utf-8"><title>{title}</title>',
+            '<style>',
+            f"body{{margin:0;padding:0;font-family:'{font_cfg['name']}';font-size:{font_cfg['size']}pt;color:#000;}}",
+            '.document-container{margin:0 auto;max-width:8.27in;padding:1in;box-sizing:border-box;}',
+            f".content p{{line-height:{paragraph_cfg.get('line_spacing', 1.15)};margin-bottom:{paragraph_cfg.get('space_after_pts', 6)}pt;text-align:{justification_css};}}",
+            '.content table{border-collapse:collapse;width:100%;margin-bottom:12pt;}',
+            '.content th,.content td{border:1px solid #333;padding:6pt;text-align:left;}',
+            '.content code{font-family:"Courier New",monospace;font-size:10pt;background:#f5f5f5;padding:1pt 3pt;}',
+            '.content pre{background:#f5f5f5;padding:12pt;overflow-x:auto;}',
+            '.header,.footer{text-align:center;font-size:9pt;color:#555;}',
+            '.header{margin-bottom:12pt;}',
+            '.footer{margin-top:24pt;border-top:1px solid #ccc;padding-top:12pt;}',
+            ''.join(heading_css),
+            '</style>',
+            '</head>',
+            '<body>',
+            '<div class="document-container">',
+        ]
+
+        if header_html:
+            parts.append(f'<div class="header">{header_html}</div>')
+
+        parts.extend(
+            [
+                '<div class="content">',
+                f'{body}',
+                '</div>',
+            ]
         )
+
+        if footer_html:
+            parts.append(f'<div class="footer">{footer_html}</div>')
+
+        parts.extend(['</div>', '</body>', '</html>'])
+
+        return ''.join(parts)
 
     # ------------------------------------------------------------------
     # Internal helpers

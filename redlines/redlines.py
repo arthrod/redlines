@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from typing import Any, Optional, Tuple
+
 from rich.text import Text
 
 from redlines.document import Document
 from redlines.processor import Redline, WholeDocumentProcessor
+from redlines.utils.conversion_manager import ConversionManager
+from redlines.utils.styles import Styles
 
 
 class Redlines:
@@ -18,10 +22,14 @@ class Redlines:
         return self._source
 
     @source.setter
-    def source(self, value) -> None:
-        self._source = value.text if isinstance(value, Document) else value
+    def source(self, value: Any) -> None:
+        content, fmt_hint, metadata = self._unpack_input(value, self._pending_source_format, self._pending_source_metadata)
+        self._source_format = fmt_hint
+        self._source_metadata = metadata
+        self._source = self._coerce_to_text(content, fmt_hint)
+        self._pending_source_format = None
+        self._pending_source_metadata = None
 
-        # If test is already set, process the new source against it
         if self._test is not None:
             self._redlines = self.processor.process(self._source, self._test)
 
@@ -31,10 +39,14 @@ class Redlines:
         return self._test
 
     @test.setter
-    def test(self, value) -> None:
-        self._test = value.text if isinstance(value, Document) else value
+    def test(self, value: Any) -> None:
+        content, fmt_hint, metadata = self._unpack_input(value, self._pending_test_format, self._pending_test_metadata)
+        self._test_format = fmt_hint
+        self._test_metadata = metadata
+        self._test = self._coerce_to_text(content, fmt_hint)
+        self._pending_test_format = None
+        self._pending_test_metadata = None
 
-        # Process the text against the source
         if self._source is not None and self._test is not None:
             self._redlines = self.processor.process(self._source, self._test)
 
@@ -49,7 +61,7 @@ class Redlines:
             raise ValueError(msg)
         return self._redlines
 
-    def __init__(self, source: str | Document, test: str | Document | None = None, **options) -> None:
+    def __init__(self, source: Any, test: Any | None = None, **options) -> None:
         """Redline is a class used to compare text, and producing human-readable differences or deltas
         which look like track changes in Microsoft Word.
 
@@ -83,12 +95,40 @@ class Redlines:
         :param test: Optional test text to compare with the source.
         """
         self.processor = WholeDocumentProcessor()
-        self.source = source.text if isinstance(source, Document) else source
+
+        styles_option = options.pop('styles', None)
+        conversion_manager = options.pop('conversion_manager', None)
+        source_format = options.pop('source_format', None)
+        test_format = options.pop('test_format', None)
+        source_metadata = options.pop('source_metadata', None)
+        test_metadata = options.pop('test_metadata', None)
+        conversion_metadata = options.pop('conversion_metadata', None)
+
+        if conversion_metadata:
+            source_metadata = conversion_metadata.get('source', source_metadata)
+            test_metadata = conversion_metadata.get('test', test_metadata)
+
+        self.styles = self._build_styles(styles_option)
+        self.conversion_manager: ConversionManager | None = conversion_manager
+
+        self._source: Optional[str] = None
+        self._test: Optional[str] = None
+        self._redlines: Optional[list[Redline]] = None
+
+        self._source_format: Optional[str] = None
+        self._test_format: Optional[str] = None
+        self._source_metadata: Optional[dict[str, Any]] = source_metadata
+        self._test_metadata: Optional[dict[str, Any]] = test_metadata
+        self._pending_source_format: Optional[str] = source_format
+        self._pending_test_format: Optional[str] = test_format
+        self._pending_source_metadata: Optional[dict[str, Any]] = source_metadata
+        self._pending_test_metadata: Optional[dict[str, Any]] = test_metadata
+
         self.options = options
-        self._redlines = None
-        if test:
-            self.test = test.text if isinstance(test, Document) else test
-            # self.compare()
+
+        self.source = source
+        if test is not None:
+            self.test = test
 
     @property
     def opcodes(self) -> list[tuple[str, int, int, int, int]]:
@@ -104,6 +144,39 @@ class Redlines:
         ```
         """
         return [redline.opcodes for redline in self.redlines]
+
+    # ------------------------------------------------------------------
+    # Conversion helpers
+    # ------------------------------------------------------------------
+    def set_source(self, value: Any, *, fmt: Optional[str] = None, metadata: Optional[dict[str, Any]] = None) -> None:
+        self._pending_source_format = fmt
+        self._pending_source_metadata = metadata
+        self.source = value
+
+    def set_test(self, value: Any, *, fmt: Optional[str] = None, metadata: Optional[dict[str, Any]] = None) -> None:
+        self._pending_test_format = fmt
+        self._pending_test_metadata = metadata
+        self.test = value
+
+    def convert(
+        self,
+        data: Any,
+        source_format: str,
+        target_format: str,
+        *,
+        metadata: Optional[dict[str, Any]] = None,
+        asynchronous: bool = False,
+    ) -> Any:
+        manager = self._get_conversion_manager()
+        if asynchronous:
+            return manager.convert(data, source_format, target_format, metadata=metadata)
+        return manager.convert_sync(data, source_format, target_format, metadata=metadata)
+
+    def extract_text(self, data: Any, source_format: str, *, asynchronous: bool = False) -> Any:
+        manager = self._get_conversion_manager()
+        if asynchronous:
+            return manager.extract_text(data, source_format)
+        return manager.extract_text_sync(data, source_format)
 
     @property
     def output_markdown(self) -> str:
@@ -242,6 +315,70 @@ class Redlines:
                     result.pop()
 
         return ''.join(result)
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+    def _unpack_input(
+        self,
+        value: Any,
+        default_format: Optional[str],
+        default_metadata: Optional[dict[str, Any]],
+    ) -> Tuple[Any, Optional[str], Optional[dict[str, Any]]]:
+        fmt_hint = default_format
+        metadata = default_metadata
+        content = value
+
+        if isinstance(value, dict):
+            content = value.get('content', value.get('data'))
+            fmt_hint = value.get('format', fmt_hint)
+            metadata = value.get('metadata', metadata)
+        elif isinstance(value, tuple):
+            if len(value) == 2:
+                content, fmt_hint = value
+            elif len(value) == 3:
+                content, fmt_hint, metadata = value
+            else:
+                msg = 'Input tuples must have length 2 or 3 (content, format, [metadata]).'
+                raise ValueError(msg)
+
+        if content is None:
+            msg = 'Input content cannot be None.'
+            raise ValueError(msg)
+
+        return content, fmt_hint, metadata
+
+    def _coerce_to_text(self, value: Any, fmt_hint: Optional[str]) -> str:
+        if isinstance(value, Document):
+            return value.text
+        if fmt_hint:
+            return self._get_conversion_manager().extract_text_sync(value, fmt_hint)
+        if isinstance(value, bytes):
+            return self._decode_bytes(value)
+        return str(value)
+
+    @staticmethod
+    def _decode_bytes(payload: bytes) -> str:
+        try:
+            return payload.decode('utf-8')
+        except UnicodeDecodeError:
+            return payload.decode('latin1', errors='replace')
+
+    @staticmethod
+    def _build_styles(option: Any) -> Styles:
+        if isinstance(option, Styles):
+            return option
+        if isinstance(option, dict):
+            return Styles(config=option)
+        if option is None:
+            return Styles()
+        msg = 'styles must be a Styles instance, a dict configuration, or None'
+        raise TypeError(msg)
+
+    def _get_conversion_manager(self) -> ConversionManager:
+        if self.conversion_manager is None:
+            self.conversion_manager = ConversionManager(styles=self.styles)
+        return self.conversion_manager
 
     @property
     def output_rich(self) -> Text:

@@ -1,80 +1,80 @@
 import asyncio
-import os
-import tempfile
 
+import pytest
+
+from redlines.utils import pdf_processor as pdf_module
+from redlines.utils.markdown_processor import MarkdownProcessor
 from redlines.utils.pdf_processor import PDFProcessor
+from redlines.utils.styles import Styles
 
 
-def test_pdf_processor() -> None:
-    """Test the PDFProcessor class functionality."""
-    # Create a basic PDFProcessor instance
-    processor = PDFProcessor()
+@pytest.fixture
+def pdf_processor_factory(monkeypatch):
+    class DummyWeasy:
+        def __init__(self, string: str) -> None:
+            self.string = string
 
-    # Test markdown content
-    markdown_content = """
-# Test Document
+        def write_pdf(self) -> bytes:
+            return b'PDF-WEASY'
 
-This is a test document to verify the PDFProcessor functionality.
+    class DummyStatus:
+        def __init__(self, err: bool = False) -> None:
+            self.err = err
 
-## Features Tested
+    class DummyPisa:
+        @staticmethod
+        def CreatePDF(html_document: str, dest) -> DummyStatus:
+            dest.write(b'PDF-XHTML')
+            return DummyStatus()
 
-- Headers
-- Bold text **bold**
-- Italic text *italic*
-- Lists
-  - Item 1
-  - Item 2
-- Code blocks
-  ```python
-  print("Hello, World!")
-  ```
+    monkeypatch.setattr(pdf_module, 'WeasyHTML', DummyWeasy)
+    monkeypatch.setattr(pdf_module, 'pisa', DummyPisa)
 
-### Conclusion
+    def factory(**kwargs):
+        return PDFProcessor(styles=Styles(), markdown_processor=MarkdownProcessor(), **kwargs)
 
-The PDFProcessor should handle all these elements properly.
-"""
-
-    try:
-        # Test markdown to PDF conversion
-        pdf_bytes = asyncio.run(
-            processor.markdown_to_pdf(markdown_content, cicero_request_id='TEST-001', include_request_id=True)
-        )
-
-        # Save the PDF to a temporary file to verify it's valid
-        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as temp_file:
-            temp_file.write(pdf_bytes)
-            temp_file_path = temp_file.name
-
-        # Verify the file exists and has content
-        assert os.path.exists(temp_file_path), 'PDF file was not created'
-        assert os.path.getsize(temp_file_path) > 0, 'PDF file is empty'
-
-        # Clean up
-        os.unlink(temp_file_path)
-
-        # Test HTML to PDF conversion
-        html_content = '<h1>Test HTML</h1><p>This is a test HTML content.</p>'
-        asyncio.run(processor.html_to_pdf(html_content, cicero_request_id='TEST-02', include_request_id=True))
-
-        # Test batch conversion
-        markdown_contents = [
-            '# Document 1\nContent of document 1.',
-            '# Document 2\nContent of document 2.',
-            '# Document 3\nContent of document 3.',
-        ]
-
-        batch_results = asyncio.run(
-            processor.batch_convert_to_pdf(
-                markdown_contents, cicero_request_ids=['BATCH-001', 'BATCH-002', 'BATCH-003'], include_request_id=True
-            )
-        )
-
-        for pdf_bytes in batch_results:
-            pass
-
-    except Exception:
-        raise
+    return factory
 
 
-if __name__ == '__main__':
-    test_pdf_processor()
+def test_markdown_to_pdf_prefers_weasy(pdf_processor_factory) -> None:
+    processor = pdf_processor_factory()
+    pdf_bytes = asyncio.run(processor.markdown_to_pdf('# Title'))
+    assert pdf_bytes == b'PDF-WEASY'
+
+
+def test_markdown_to_pdf_falls_back_to_xhtml(pdf_processor_factory, monkeypatch) -> None:
+    processor = pdf_processor_factory()
+
+    async def failing_weasy(self, html_document: str) -> bytes:  # noqa: ARG001 - signature required
+        raise RuntimeError('backend failure')
+
+    monkeypatch.setattr(PDFProcessor, '_render_weasyprint', failing_weasy)
+
+    pdf_bytes = asyncio.run(processor.markdown_to_pdf('# Title', prefer_backend='weasyprint'))
+    assert pdf_bytes == b'PDF-XHTML'
+
+
+def test_pdf_to_markdown_error_when_extraction_missing(pdf_processor_factory, monkeypatch) -> None:
+    processor = pdf_processor_factory()
+
+    async def stub_from_pdf(payload: bytes) -> str:  # noqa: ARG001 - signature required
+        return ''
+
+    monkeypatch.setattr(processor.markdown_processor, 'from_pdf', stub_from_pdf)
+
+    with pytest.raises(ValueError):
+        asyncio.run(processor.pdf_to_markdown(b'%PDF'))
+
+
+def test_pdf_to_html_uses_styles(pdf_processor_factory, monkeypatch) -> None:
+    processor = pdf_processor_factory()
+
+    async def stub_from_pdf(payload: bytes) -> str:  # noqa: ARG001
+        return '# Heading\n\nContent paragraph.'
+
+    monkeypatch.setattr(processor.markdown_processor, 'from_pdf', stub_from_pdf)
+
+    html_output = asyncio.run(processor.pdf_to_html(b'%PDF', metadata={'title': 'Sample'}))
+    assert '<html>' in html_output
+    assert 'Heading' in html_output
+    assert 'Content paragraph.' in html_output

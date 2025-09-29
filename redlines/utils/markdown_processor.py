@@ -59,11 +59,7 @@ class MarkdownProcessor:
     """
 
     def __init__(
-        self,
-        *,
-        enable_docling: bool = True,
-        enable_markitdown: bool = True,
-        max_concurrent_tasks: int = 6,
+        self, *, enable_docling: bool = True, enable_markitdown: bool = True, max_concurrent_tasks: int = 6
     ) -> None:
         self.enable_docling = enable_docling and DocumentConverter is not None and DocumentStream is not None
         self.enable_markitdown = enable_markitdown and markitdown is not None
@@ -74,13 +70,13 @@ class MarkdownProcessor:
     # Markdown renderers
     # ------------------------------------------------------------------
     async def to_html(self, markdown_content: str, *, hard_wrap: bool = True) -> str:
-        if hard_wrap:
-            renderer = mistune.create_markdown(
-                renderer=mistune.HTMLRenderer(), inline=mistune.InlineParser(hard_wrap=True), plugins=MISTUNE_PLUGINS
-            )
-        else:
-            renderer = self._markdown_to_html
-        return renderer(markdown_content)
+        renderer = (
+            mistune.create_markdown(renderer=mistune.HTMLRenderer(), plugins=MISTUNE_PLUGINS, hard_wrap=True)
+            if hard_wrap
+            else self._markdown_to_html
+        )
+        result = renderer(markdown_content)
+        return result if isinstance(result, str) else str(result)
 
     async def to_text(self, markdown_content: str) -> str:
         html = await self.to_html(markdown_content)
@@ -153,6 +149,8 @@ class MarkdownProcessor:
 
     async def _markitdown_to_markdown(self, payload: bytes) -> Optional[str]:
         if not self.enable_markitdown:
+            return None
+        if markitdown is None:
             return None
         try:
             converter = markitdown.MarkItDown(enable_plugins=True)

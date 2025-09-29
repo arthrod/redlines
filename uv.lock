@@ -826,7 +826,7 @@ name = "exceptiongroup"
 version = "1.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/0b/9f/a65090624ecf468cdca03533906e7c69ed7588582240cfe7cc9e770b50eb/exceptiongroup-1.3.0.tar.gz", hash = "sha256:b241f5885f560bc56a59ee63ca4c6a8bfa46ae4ad651af316d4e81817bb9fd88", size = 29749, upload-time = "2025-05-10T17:42:51.123Z" }
 wheels = [
@@ -2683,7 +2683,10 @@ name = "redlines"
 version = "0.5.2"
 source = { editable = "." }
 dependencies = [
+    { name = "beautifulsoup4" },
     { name = "click" },
+    { name = "markdownify" },
+    { name = "mistune" },
     { name = "rich" },
     { name = "rich-click" },
 ]
@@ -2698,13 +2701,39 @@ all = [
     { name = "html-for-docx" },
     { name = "html5lib" },
     { name = "markitdown", extra = ["all"] },
-    { name = "mistune" },
     { name = "pillow" },
     { name = "pyhanko" },
     { name = "pyhanko-certvalidator" },
     { name = "pypdf" },
     { name = "python-bidi" },
     { name = "python-docx" },
+    { name = "reportlab" },
+    { name = "svglib" },
+    { name = "weasyprint" },
+    { name = "xhtml2pdf" },
+]
+docx = [
+    { name = "docling" },
+    { name = "docling-core" },
+    { name = "docling-ibm-models" },
+    { name = "docling-parse" },
+    { name = "html-for-docx" },
+    { name = "markitdown", extra = ["all"] },
+    { name = "python-docx" },
+]
+pdf = [
+    { name = "arabic-reshaper" },
+    { name = "docling" },
+    { name = "docling-core" },
+    { name = "docling-ibm-models" },
+    { name = "docling-parse" },
+    { name = "html5lib" },
+    { name = "markitdown", extra = ["all"] },
+    { name = "pillow" },
+    { name = "pyhanko" },
+    { name = "pyhanko-certvalidator" },
+    { name = "pypdf" },
+    { name = "python-bidi" },
     { name = "reportlab" },
     { name = "svglib" },
     { name = "weasyprint" },
@@ -2723,29 +2752,54 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "arabic-reshaper", marker = "extra == 'all'", specifier = ">=3.0.0" },
+    { name = "arabic-reshaper", marker = "extra == 'pdf'", specifier = ">=3.0.0" },
+    { name = "beautifulsoup4", specifier = ">=4.12.2" },
     { name = "click", specifier = ">=8.1.7" },
     { name = "docling", marker = "extra == 'all'", specifier = "==2.48.0" },
+    { name = "docling", marker = "extra == 'docx'", specifier = "==2.48.0" },
+    { name = "docling", marker = "extra == 'pdf'", specifier = "==2.48.0" },
     { name = "docling-core", marker = "extra == 'all'", specifier = ">=2.45.0" },
+    { name = "docling-core", marker = "extra == 'docx'", specifier = ">=2.45.0" },
+    { name = "docling-core", marker = "extra == 'pdf'", specifier = ">=2.45.0" },
     { name = "docling-ibm-models", marker = "extra == 'all'", specifier = ">=3.9.0" },
+    { name = "docling-ibm-models", marker = "extra == 'docx'", specifier = ">=3.9.0" },
+    { name = "docling-ibm-models", marker = "extra == 'pdf'", specifier = ">=3.9.0" },
     { name = "docling-parse", marker = "extra == 'all'", specifier = ">=4.2.3" },
-    { name = "html-for-docx", marker = "extra == 'all'", specifier = ">=1.0.10" },
+    { name = "docling-parse", marker = "extra == 'docx'", specifier = ">=4.2.3" },
+    { name = "docling-parse", marker = "extra == 'pdf'", specifier = ">=4.2.3" },
+    { name = "html-for-docx", marker = "extra == 'all'", specifier = ">=0.6.0" },
+    { name = "html-for-docx", marker = "extra == 'docx'", specifier = ">=0.6.0" },
     { name = "html5lib", marker = "extra == 'all'", specifier = ">=1.1" },
+    { name = "html5lib", marker = "extra == 'pdf'", specifier = ">=1.1" },
+    { name = "markdownify", specifier = ">=0.11.6" },
     { name = "markitdown", extras = ["all"], marker = "extra == 'all'", specifier = ">=0.1.3" },
-    { name = "mistune", marker = "extra == 'all'", specifier = ">=3.1.4" },
-    { name = "pillow", marker = "extra == 'all'", specifier = ">=8.1.1" },
+    { name = "markitdown", extras = ["all"], marker = "extra == 'docx'", specifier = ">=0.1.3" },
+    { name = "markitdown", extras = ["all"], marker = "extra == 'pdf'", specifier = ">=0.1.3" },
+    { name = "mistune", specifier = ">=3.1.4" },
+    { name = "pillow", marker = "extra == 'all'", specifier = ">=9.0.0" },
+    { name = "pillow", marker = "extra == 'pdf'", specifier = ">=9.0.0" },
     { name = "pyhanko", marker = "extra == 'all'", specifier = ">=0.12.1" },
+    { name = "pyhanko", marker = "extra == 'pdf'", specifier = ">=0.12.1" },
     { name = "pyhanko-certvalidator", marker = "extra == 'all'", specifier = ">=0.19.5" },
+    { name = "pyhanko-certvalidator", marker = "extra == 'pdf'", specifier = ">=0.19.5" },
     { name = "pypdf", marker = "extra == 'all'", specifier = ">=3.1.0" },
+    { name = "pypdf", marker = "extra == 'pdf'", specifier = ">=3.1.0" },
     { name = "python-bidi", marker = "extra == 'all'", specifier = ">=0.5.0" },
-    { name = "python-docx", marker = "extra == 'all'", specifier = ">=1.2.0" },
+    { name = "python-bidi", marker = "extra == 'pdf'", specifier = ">=0.5.0" },
+    { name = "python-docx", marker = "extra == 'all'", specifier = ">=1.1.0" },
+    { name = "python-docx", marker = "extra == 'docx'", specifier = ">=1.1.0" },
     { name = "reportlab", marker = "extra == 'all'", specifier = ">=4.0.4,<5" },
+    { name = "reportlab", marker = "extra == 'pdf'", specifier = ">=4.0.4,<5" },
     { name = "rich", specifier = ">=13.3.5" },
     { name = "rich-click", specifier = ">=1.6.1" },
     { name = "svglib", marker = "extra == 'all'", specifier = ">=1.2.1" },
+    { name = "svglib", marker = "extra == 'pdf'", specifier = ">=1.2.1" },
     { name = "weasyprint", marker = "extra == 'all'", specifier = ">=66.0" },
+    { name = "weasyprint", marker = "extra == 'pdf'", specifier = ">=66.0" },
     { name = "xhtml2pdf", marker = "extra == 'all'", specifier = ">=0.2.17" },
+    { name = "xhtml2pdf", marker = "extra == 'pdf'", specifier = ">=0.2.17" },
 ]
-provides-extras = ["all"]
+provides-extras = ["docx", "pdf", "all"]
 
 [package.metadata.requires-dev]
 dev = [

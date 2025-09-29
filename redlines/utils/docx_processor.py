@@ -13,7 +13,10 @@ from docx import Document
 from docx.document import Document as DocumentType
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Pt
-from html4docx import HtmlToDocx
+try:  # pragma: no cover - optional dependency
+    from html4docx import HtmlToDocx
+except ImportError:  # pragma: no cover - optional dependency
+    HtmlToDocx = None
 
 from .markdown_processor import MarkdownProcessor
 from .styles import Styles
@@ -43,7 +46,7 @@ class DOCXProcessor:
     ) -> None:
         self.styles = styles or Styles()
         self.markdown_processor = markdown_processor or MarkdownProcessor()
-        self.html4docx_enabled = html4docx_enabled
+        self.html4docx_enabled = html4docx_enabled and HtmlToDocx is not None
         self.manual_enabled = manual_enabled
         self.preferred_method = preferred_method
         self._semaphore = asyncio.Semaphore(max_concurrent_operations)
@@ -126,14 +129,17 @@ class DOCXProcessor:
         return base + [fallback]
 
     async def _html_to_docx_html4docx(self, html_content: str) -> bytes:
+        if HtmlToDocx is None:  # pragma: no cover - defensive
+            msg = 'html4docx backend is not available'
+            raise RuntimeError(msg)
         parser = HtmlToDocx()
         with contextlib.suppress(Exception):
             parser.table_style = self._table_style
-        document = parser.parse_html_string(html_content)
+        document = await asyncio.to_thread(parser.parse_html_string, html_content)
         self.styles.configure_document(document)
         self._append_configured_text(document)
         buffer = BytesIO()
-        document.save(buffer)
+        await asyncio.to_thread(document.save, buffer)
         buffer.seek(0)
         return buffer.read()
 
@@ -235,7 +241,7 @@ class DOCXProcessor:
         self._append_configured_text(doc)
 
         buffer = BytesIO()
-        doc.save(buffer)
+        await asyncio.to_thread(doc.save, buffer)
         buffer.seek(0)
         return buffer.read()
 
