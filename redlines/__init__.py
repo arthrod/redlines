@@ -64,7 +64,7 @@ The documentation contains other information on common issues users have faced w
 
 """
 
-from . import cli, document, processor, redlines as redlines_module, utils
+from . import document, processor, utils
 from .document import Document, PlainTextFile
 from .redlines import Redlines
 from .utils import ConversionManager, Styles
@@ -75,11 +75,8 @@ __all__ = [
     'PlainTextFile',
     'Redlines',
     'Styles',
-    'cli',
     'document',
     'processor',
     'redlines',
     'utils',
 ]
-
-redlines = redlines_module

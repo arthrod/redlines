@@ -4,10 +4,10 @@ from typing import Any, Optional, Tuple
 
 from rich.text import Text
 
-from redlines.document import Document
-from redlines.processor import Redline, WholeDocumentProcessor
-from redlines.utils.conversion_manager import ConversionManager
-from redlines.utils.styles import Styles
+from .document import Document
+from .processor import Redline, WholeDocumentProcessor
+from .utils.conversion_manager import ConversionManager
+from .utils.styles import Styles
 
 
 class Redlines:
