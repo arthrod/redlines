@@ -9,17 +9,16 @@ authors = [
 license = { text = "MIT" }
 requires-python = ">=3.10"
 dependencies = [
-    "click>=8.1.7",
-    "rich-click>=1.6.1",
     "rich>=13.3.5",
     "mistune>=3.1.4",
     "beautifulsoup4>=4.12.2",
     "markdownify>=0.11.6",
+    "typer[all]>=0.12.3",
 ]
 urls = { homepage = "https://houfu.github.io/redlines/", repository = "https://github.com/houfu/redlines" }
 
 [project.scripts]
-redlines = 'redlines.cli:cli'
+redlines = 'redlines.cli:app'
 
 [dependency-groups]
 dev = [

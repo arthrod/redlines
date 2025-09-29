@@ -64,13 +64,15 @@ The documentation contains other information on common issues users have faced w
 
 """
 
-from . import utils
-from .utils import ConversionManager, Styles
-from .document import *
+from . import cli, document, processor, redlines as redlines_module, utils
+from .document import Document, PlainTextFile
 from .redlines import Redlines
+from .utils import ConversionManager, Styles
 
 __all__ = [
     'ConversionManager',
+    'Document',
+    'PlainTextFile',
     'Redlines',
     'Styles',
     'cli',
@@ -79,3 +81,5 @@ __all__ = [
     'redlines',
     'utils',
 ]
+
+redlines = redlines_module

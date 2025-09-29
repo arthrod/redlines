@@ -1,161 +1,186 @@
-"""# Command line interface for redlines.
+"""Redlines command line interface powered by Typer and Rich.
 
-A command line interface for the redlines library that allows you to compare two strings
-and see the differences in the terminal.
-
-
-## NAME
-`redlines` - A command line interface for the redlines library to compare text differences
-
-## SYNOPSIS
-```sh
-redlines [COMMAND] [OPTIONS] SOURCE TEST
-```
-
-## DESCRIPTION
-`Redlines` is a command line utility that shows the differences between two strings/text.
-The changes are represented with strike-throughs and underlines, similar to Microsoft Word's track changes.
-This method of showing changes is more familiar to lawyers and is more compact for long series of characters.
-
-## COMMANDS
-```sh
-text
-```
-Compares the strings SOURCE and TEST and produces a redline in the terminal in a display that shows the original, new, and redlined text.
-
-```sh
-simple_text
-```
-Compares the strings SOURCE and TEST and outputs the redline in the terminal.
-
-```sh
-markdown
-```
-Compares the strings SOURCE and TEST and outputs the redline as a markdown.
-
-## OPTIONS
-```sh
--h, --help
-```
-Show this help message and exit.
-
-## EXAMPLES
-
-Compare two strings and display the differences in a detailed layout:
-```sh
-redlines text "The quick brown fox jumps over the lazy dog." "The quick brown fox walks past the lazy dog."
-```
-
-Compare two strings and output the redline directly:
-```sh
-redlines simple_text "The quick brown fox jumps over the lazy dog." "The quick brown fox walks past the lazy dog."
-```
-
-## LIMITATIONS
-* The `text` command is not able to show more than 6 lines of text. You may want to use `simple_text` for longer text.
-
-You may also want to consider a related textual project if you want to use redlines in the terminal,
-[redlines-textual](https://github.com/houfu/redlines-textual).
+The CLI focuses on a delightful terminal experience while exposing the three
+core output formats supported by :class:`redlines.Redlines`.  The entry point is
+configured in ``pyproject.toml`` as ``redlines``.
 """
 
-from importlib.metadata import version
+from __future__ import annotations
 
-import rich_click as click
-from rich.console import Console, group
+import textwrap
+from importlib.metadata import PackageNotFoundError, version
+from typing import Iterable
+
+import typer
+from rich import box
+from rich.align import Align
+from rich.console import Console
 from rich.layout import Layout
 from rich.panel import Panel
+from rich.syntax import Syntax
+from rich.table import Table
 from rich.text import Text
 
 from redlines import Redlines
 
-# Use Rich markup
-click.rich_click.USE_RICH_MARKUP = True
-click.rich_click.SHOW_ARGUMENTS = True
+try:
+    PACKAGE_VERSION = version('redlines')
+except PackageNotFoundError:  # pragma: no cover - local development fallback
+    PACKAGE_VERSION = '0.0.0-dev'
+
+app = typer.Typer(
+    name='redlines',
+    add_completion=False,
+    help='Beautiful, track-change-inspired diffs for Markdown, Rich text, and terminal output.',
+)
+
+console = Console()
 
 
-@group()
-def print_intro():
-    """@private."""
-    yield Text.from_markup(
-        f'\n[bold red]--__--[/] [b]Redlines CLI[/b] [magenta]v{version("redlines")}[/] [bold red]--__--[/]\n\n'
-        f'[dim]➡️ Showing differences in text in the terminal⬅️ \n '
-        f'[b]🏠 [link=https://github.com/houfu/redlines]Homepage[/][/]',
+def _render_header(subtitle: str | None = None) -> None:
+    banner = Text.assemble(
+        ('══╡ ', 'bold red'),
+        ('Redlines CLI ', 'bold magenta'),
+        (f'v{PACKAGE_VERSION}', 'bold white'),
+        (' ╞══', 'bold red'),
+    )
+    subtitle_text = subtitle or 'Compare documents with instant, gorgeous output.'
+    console.print(
+        Panel.fit(
+            Align.center(Text(subtitle_text, justify='center')), border_style='magenta', title=banner
+        ),
         justify='center',
     )
 
 
-@click.group()
-def cli() -> None:
-    r"""[red on black]Redlines[/] shows the differences between two strings/text.
-
-    The changes are represented with strike-throughs and underlines, which looks similar to Microsoft Word's
-    track changes. This method of showing changes is more familiar to lawyers and is more compact for
-    long series of characters.
-
-    [b][link=https://github.com/houfu/redlines]Homepage[/][/]
-    \f
-    @private
-    """
+def _render_examples_table(examples: Iterable[tuple[str, str, str]]) -> Table:
+    table = Table(title='✨ Redlines Gallery', box=box.ROUNDED, show_lines=False)
+    table.add_column('Example', style='cyan', no_wrap=True)
+    table.add_column('Source snippet', style='green')
+    table.add_column('Test snippet', style='red')
+    for title, src, test in examples:
+        table.add_row(title, src, test)
+    return table
 
 
-@cli.command()
-@click.argument('source', required=True)
-@click.argument('test', required=True)
-def text(source, test) -> None:
-    r"""Compares the strings SOURCE and TEST and produce a redline in the terminal in a display that shows the original, new and redlined text.
+@app.callback(invoke_without_command=True)
+def main(
+    ctx: typer.Context,
+    version_flag: bool = typer.Option(
+        False,
+        '--version',
+        '-V',
+        help='Show the redlines CLI version and exit.',
+        rich_help_panel='General options',
+    ),
+) -> None:
+    """Entry point for the CLI. Displays overview when invoked without commands."""
+    if version_flag:
+        console.print(f'[bold magenta]redlines[/] {PACKAGE_VERSION}', justify='center')
+        raise typer.Exit()
 
-    \f
-    @private
-    """
-    redlines = Redlines(source, test)
+    if ctx.invoked_subcommand is not None:
+        return
 
-    console = Console()
+    _render_header()
+    overview = textwrap.dedent(
+        """
+        • Run `redlines text SOURCE TEST` for a rich side-by-side preview.
+        • Run `redlines simple SOURCE TEST` for a minimal inline diff.
+        • Run `redlines markdown SOURCE TEST --style none` to generate Markdown deltas.
+        • Run `redlines gallery` to explore curated CLI examples.
+        """
+    ).strip()
+    console.print(Panel.fit(overview, title='Getting started', border_style='cyan'), justify='center')
+
+
+@app.command()
+def text(
+    source: str = typer.Argument(..., help='Source text to compare.'),
+    test: str = typer.Argument(..., help='Test text to compare against the source.'),
+    title: str = typer.Option('Rich diff canvas', help='Panel title for the rendered comparison.'),
+) -> None:
+    """Display a deluxe, panelled diff using Rich layouts."""
+    _render_header('Live comparison canvas')
+    diff = Redlines(source, test)
+
     layout = Layout()
     layout.split_column(
-        Layout(print_intro()),
-        Layout(Panel(redlines.output_rich, title='redline', title_align='left'), name='redline'),
-        Layout(name='lower'),
+        Layout(name='banner', size=3),
+        Layout(name='body'),
     )
-    layout['lower'].split_row(
-        Layout(Panel(source, title='Source', title_align='left'), name='source'),
-        Layout(Panel(test, title='Test', title_align='left'), name='test'),
+    layout['banner'].update(
+        Align.center(Text('Bring your contract reviews to the terminal. ✨', style='bold green'))
     )
+
+    sub_layout = Layout()
+    sub_layout.split_row(
+        Layout(Panel.fit(source, title='Source', border_style='green')),
+        Layout(Panel.fit(test, title='Test', border_style='red')),
+    )
+
+    layout['body'].split_column(
+        Layout(Panel.fit(diff.output_rich, title=title, border_style='magenta')), sub_layout
+    )
+
     console.print(layout)
 
 
-@cli.command()
-@click.argument('source', required=True)
-@click.argument('test', required=True)
-def simple_text(source, test) -> None:
-    r"""Compares the strings SOURCE and TEST and outputs the redline in the terminal.
-
-    \f
-    @private
-    """
-    from rich import print
-
-    redlines = Redlines(source, test)
-    print(redlines.output_rich)
+@app.command('simple')
+def simple_text(
+    source: str = typer.Argument(..., help='Source text to compare.'),
+    test: str = typer.Argument(..., help='Test text to compare against the source.'),
+) -> None:
+    """Print a concise Rich-formatted diff suitable for piping into other tools."""
+    _render_header('Inline diff output')
+    console.print(Redlines(source, test).output_rich)
 
 
-@cli.command()
-@click.argument('source', required=True)
-@click.argument('test', required=True)
-@click.option(
-    'markdown_style',
-    '--markdown-style',
-    '-m',
-    type=click.Choice(['red_green', 'none', 'red', 'ghfm', 'bbcode', 'streamlit']),
-    default='red_green',
-    help='The markdown style to use.',
-)
-def markdown(source, test, markdown_style) -> None:
-    r"""Compares the strings SOURCE and TEST and outputs the redline as a markdown.
+@app.command()
+def markdown(
+    source: str = typer.Argument(..., help='Source text to compare.'),
+    test: str = typer.Argument(..., help='Test text to compare against the source.'),
+    style: str = typer.Option(
+        'red_green',
+        '--style',
+        '-s',
+        case_sensitive=False,
+        help='Markdown diff style (red_green, none, red, ghfm, bbcode, streamlit).',
+    ),
+) -> None:
+    """Emit the comparison as Markdown, optionally using alternate styles."""
+    _render_header('Markdown delta output')
+    diff = Redlines(source, test, markdown_style=style)
+    syntax = Syntax(diff.output_markdown, 'markdown', theme='github-dark', line_numbers=False)
+    console.print(syntax)
 
-    \f
-    @private
-    """
-    from rich import print
 
-    redlines = Redlines(source, test, markdown_style=markdown_style)
-    print(redlines.output_markdown)
+@app.command()
+def gallery() -> None:
+    """Showcase built-in examples that highlight the CLI layout capabilities."""
+    _render_header('Gallery of curated examples')
+    sample_pairs = [
+        (
+            'Contract tweak',
+            'Party A shall deliver goods within five (5) business days.',
+            'Party A shall deliver goods within three (3) business days.',
+        ),
+        (
+            'Product roadmap',
+            'Our Q3 roadmap focuses on stability improvements and bug fixes.',
+            'Our Q3 roadmap focuses on generative AI copilots and bug fixes.',
+        ),
+        (
+            'Email polish',
+            'Thanks for reaching out, happy to help with the rollout next week.',
+            'Thanks for reaching out! Happy to support the rollout later this week.',
+        ),
+    ]
+
+    table = _render_examples_table(sample_pairs)
+    console.print(table)
+    console.print('\nUse `redlines text` with the snippets above to explore further. 🚀', style='dim')
+
+
+if __name__ == '__main__':
+    app()

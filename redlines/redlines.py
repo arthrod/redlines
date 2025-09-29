@@ -23,7 +23,9 @@ class Redlines:
 
     @source.setter
     def source(self, value: Any) -> None:
-        content, fmt_hint, metadata = self._unpack_input(value, self._pending_source_format, self._pending_source_metadata)
+        content, fmt_hint, metadata = self._unpack_input(
+            value, self._pending_source_format, self._pending_source_metadata
+        )
         self._source_format = fmt_hint
         self._source_metadata = metadata
         self._source = self._coerce_to_text(content, fmt_hint)
@@ -324,10 +326,7 @@ class Redlines:
     # Internal helpers
     # ------------------------------------------------------------------
     def _unpack_input(
-        self,
-        value: Any,
-        default_format: Optional[str],
-        default_metadata: Optional[dict[str, Any]],
+        self, value: Any, default_format: Optional[str], default_metadata: Optional[dict[str, Any]]
     ) -> Tuple[Any, Optional[str], Optional[dict[str, Any]]]:
         """Normalise user input into ``(content, format_hint, metadata)``."""
         fmt_hint = default_format
