@@ -2,7 +2,7 @@ import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from difflib import SequenceMatcher
-from typing import Optional, Union
+from typing import Any, Optional, Union
 
 from redlines.document import Document
 
@@ -80,6 +80,14 @@ class Chunk:
     """The tokens of the chunk"""
     chunk_location: Optional[str]
     """An optional string describing the location of the chunk in the document. For example, a PDF page number"""
+    metadata: Optional[dict[str, Any]] = None
+    """Processor specific metadata (e.g., XPath information)"""
+
+    def slice_text(self, start: int, end: int) -> str:
+        """Return the original text represented by tokens within ``[start, end)``."""
+        if start >= end:
+            return ''
+        return ''.join(self.text[start:end])
 
 
 @dataclass
@@ -91,6 +99,38 @@ class Redline:
     """The chunk of text that is being redlined"""
     opcodes: tuple[str, int, int, int, int]
     """The opcodes that describe the redline in the chunk. See the difflib documentation for more information"""
+    metadata: Optional[dict[str, Any]] = None
+    """Additional information describing how the change was produced"""
+
+    def to_dict(self, *, include_tokens: bool = False) -> dict[str, Any]:
+        """Return a serializable representation of the redline."""
+        tag, i1, i2, j1, j2 = self.opcodes
+        source_segment = {
+            'start': i1,
+            'end': i2,
+            'text': self.source_chunk.slice_text(i1, i2),
+        }
+        test_segment = {
+            'start': j1,
+            'end': j2,
+            'text': self.test_chunk.slice_text(j1, j2),
+        }
+        if include_tokens:
+            source_segment['tokens'] = self.source_chunk.text[i1:i2]
+            test_segment['tokens'] = self.test_chunk.text[j1:j2]
+
+        if self.source_chunk.metadata:
+            source_segment['metadata'] = self.source_chunk.metadata
+        if self.test_chunk.metadata:
+            test_segment['metadata'] = self.test_chunk.metadata
+
+        payload: dict[str, Any] = {
+            'type': tag,
+            'source': source_segment,
+            'test': test_segment,
+            'metadata': self.metadata or {},
+        }
+        return payload
 
 
 class RedlinesProcessor(ABC):

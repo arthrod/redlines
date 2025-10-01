@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any, Optional, Tuple
+
+from importlib.metadata import PackageNotFoundError, version
 
 from rich.text import Text
 
 from .document import Document
+from .models import DiffChange, DiffMetadata, DiffResult, DiffSegment, DiffSummary
 from .processor import Redline, WholeDocumentProcessor
 from .utils.conversion_manager import ConversionManager
 from .utils.styles import Styles
+from .xmldiff_processor import XmlDiffProcessor
 
 
 class Redlines:
@@ -32,8 +38,9 @@ class Redlines:
         self._pending_source_format = None
         self._pending_source_metadata = None
 
+        self._redlines = None
         if self._test is not None:
-            self._redlines = self.processor.process(self._source, self._test)
+            self._compute_redlines()
 
     @property
     def test(self):
@@ -49,8 +56,9 @@ class Redlines:
         self._pending_test_format = None
         self._pending_test_metadata = None
 
+        self._redlines = None
         if self._source is not None and self._test is not None:
-            self._redlines = self.processor.process(self._source, self._test)
+            self._compute_redlines()
 
     @property
     def redlines(self) -> list[Redline]:
@@ -96,7 +104,9 @@ class Redlines:
         :param source: The source text to be used as a basis for comparison.
         :param test: Optional test text to compare with the source.
         """
-        self.processor = WholeDocumentProcessor()
+        self.processor: WholeDocumentProcessor | XmlDiffProcessor = WholeDocumentProcessor()
+        self._html_processor: Optional[XmlDiffProcessor] = None
+        self._structural_diff: list[dict[str, Any]] = []
 
         styles_option = options.pop('styles', None)
         conversion_manager = options.pop('conversion_manager', None)
@@ -368,6 +378,41 @@ class Redlines:
             return payload.decode('utf-8')
         except UnicodeDecodeError:
             return payload.decode('latin1', errors='replace')
+
+    def _compute_redlines(self) -> None:
+        if self._source is None or self._test is None:
+            return
+
+        self._select_processor()
+        self._redlines = self.processor.process(self._source, self._test)
+        if isinstance(self.processor, XmlDiffProcessor):
+            self._structural_diff = self.processor.structural_diff
+        else:
+            self._structural_diff = []
+
+    def _select_processor(self) -> None:
+        if self._should_use_html_processor():
+            if self._html_processor is None:
+                self._html_processor = XmlDiffProcessor()
+            self.processor = self._html_processor
+        else:
+            if not isinstance(self.processor, WholeDocumentProcessor):
+                self.processor = WholeDocumentProcessor()
+
+    def _should_use_html_processor(self) -> bool:
+        fmt_hints = {self._source_format, self._test_format}
+        if any(hint and 'html' in hint.lower() for hint in fmt_hints if hint):
+            return True
+        source_html = self._source and self._looks_like_html(self._source)
+        test_html = self._test and self._looks_like_html(self._test)
+        return bool(source_html or test_html)
+
+    @staticmethod
+    def _looks_like_html(value: str) -> bool:
+        stripped = value.strip()
+        if '<' not in stripped or '>' not in stripped:
+            return False
+        return stripped.startswith('<') or '</' in stripped
 
     @staticmethod
     def _build_styles(option: Any) -> Styles:
