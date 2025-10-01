@@ -8,6 +8,7 @@ configured in ``pyproject.toml`` as ``redlines``.
 from __future__ import annotations
 
 import textwrap
+from pathlib import Path
 from importlib.metadata import PackageNotFoundError, version
 from typing import Iterable
 
@@ -145,7 +146,13 @@ def markdown(
         '--style',
         '-s',
         case_sensitive=False,
-        help='Markdown diff style (red_green, none, red, ghfm, bbcode, streamlit).',
+        help='Markdown diff style (red_green, red_blue, none, red, ghfm, bbcode, streamlit).',
+    ),
+    output_json: str | None = typer.Option(
+        None,
+        '--output-json',
+        help='Write structured diff JSON to a file path (use "-" for stdout).',
+        rich_help_panel='Output options',
     ),
 ) -> None:
     """Emit the comparison as Markdown, optionally using alternate styles."""
@@ -153,6 +160,14 @@ def markdown(
     diff = Redlines(source, test, markdown_style=style)
     syntax = Syntax(diff.output_markdown, 'markdown', theme='github-dark', line_numbers=False)
     console.print(syntax)
+
+    if output_json:
+        if output_json == '-':
+            console.print_json(data=diff.output_json)
+        else:
+            path = Path(output_json)
+            diff.to_json_file(path)
+            console.print(f'[dim]Structured diff written to {path}[/dim]')
 
 
 @app.command()

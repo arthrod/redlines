@@ -12,7 +12,8 @@ from typing import Any, Optional
 from docx import Document
 from docx.document import Document as DocumentType
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.shared import Pt
+from docx.shared import Pt, RGBColor
+from bs4 import BeautifulSoup, NavigableString
 try:  # pragma: no cover - optional dependency
     from html4docx import HtmlToDocx
 except ImportError:  # pragma: no cover - optional dependency
@@ -20,6 +21,7 @@ except ImportError:  # pragma: no cover - optional dependency
 
 from .markdown_processor import MarkdownProcessor
 from .styles import Styles
+from .docx_track_changes import TrackChangesBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +92,11 @@ class DOCXProcessor:
     ) -> bytes:
         """Convert HTML content to DOCX via html4docx or manual Markdown route."""
         async with self._semaphore:
+            if self._contains_track_changes(html_content):
+                try:
+                    return await self._html_to_docx_track_changes(html_content)
+                except Exception as exc:  # pragma: no cover - defensive
+                    logger.debug('Track changes conversion failed, falling back: %s', exc)
             conversion_order = self._conversion_order(method)
             for approach in conversion_order:
                 try:
@@ -138,6 +145,11 @@ class DOCXProcessor:
             base = [self.preferred_method]
         fallback = DocxProcessingMethod.MANUAL if base[0] is DocxProcessingMethod.HTML4DOCX else DocxProcessingMethod.HTML4DOCX
         return base + [fallback]
+
+    @staticmethod
+    def _contains_track_changes(html_content: str) -> bool:
+        lowered = html_content.lower()
+        return '<ins' in lowered or '<del' in lowered
 
     async def _html_to_docx_html4docx(self, html_content: str) -> bytes:
         if HtmlToDocx is None:  # pragma: no cover - defensive
@@ -256,6 +268,237 @@ class DOCXProcessor:
         await asyncio.to_thread(doc.save, buffer)
         buffer.seek(0)
         return buffer.read()
+
+    async def _html_to_docx_track_changes(self, html_content: str) -> bytes:
+        """Generate DOCX output using native track changes elements."""
+        soup = BeautifulSoup(html_content, 'html.parser')
+        doc = Document()
+        self.styles.configure_document(doc)
+        builder = TrackChangesBuilder()
+
+        body = soup.body or soup
+        for element in body.children:
+            if isinstance(element, NavigableString):
+                text = str(element).strip()
+                if not text:
+                    continue
+                paragraph = doc.add_paragraph(text)
+                self._format_paragraph(paragraph)
+                continue
+
+            if not getattr(element, 'name', None):
+                continue
+
+            name = element.name.lower()
+            if name in {'p', 'div'}:
+                paragraph = doc.add_paragraph()
+                self._format_paragraph(paragraph)
+                self._append_nodes_to_paragraph(doc, paragraph, element, builder)
+            elif name in {'ul', 'ol'}:
+                style = 'List Number' if name == 'ol' else 'List Bullet'
+                for li in element.find_all('li', recursive=False):
+                    paragraph = doc.add_paragraph(style=style)
+                    self._format_paragraph(paragraph)
+                    self._append_nodes_to_paragraph(doc, paragraph, li, builder)
+            elif name.startswith('h') and name[1:].isdigit():
+                level = int(name[1:])
+                paragraph = doc.add_paragraph()
+                try:
+                    self.styles.apply_heading(paragraph, level)
+                except ValueError:
+                    self._format_paragraph(paragraph)
+                self._append_nodes_to_paragraph(doc, paragraph, element, builder)
+            else:
+                paragraph = doc.add_paragraph()
+                self._format_paragraph(paragraph)
+                self._append_nodes_to_paragraph(doc, paragraph, element, builder)
+
+        buffer = BytesIO()
+        await asyncio.to_thread(doc.save, buffer)
+        buffer.seek(0)
+        return buffer.read()
+
+    def _append_nodes_to_paragraph(
+        self,
+        document: DocumentType,
+        paragraph,
+        element,
+        builder: TrackChangesBuilder,
+        formatting: Optional[Dict[str, object]] = None,
+    ) -> None:
+        formatting = formatting or {}
+
+        for child in element.children:
+            if isinstance(child, NavigableString):
+                text = str(child)
+                if text:
+                    run = paragraph.add_run(text)
+                    self._apply_run_formatting(run, formatting)
+                continue
+
+            if not getattr(child, 'name', None):
+                continue
+
+            name = child.name.lower()
+
+            if name == 'br':
+                paragraph.add_run().add_break()
+                continue
+
+            updated_formatting = self._derive_formatting(formatting, child)
+
+            if name == 'ins':
+                runs = self._collect_inline_runs(child, updated_formatting)
+                if runs:
+                    builder.append_insertion(paragraph, runs)
+                continue
+
+            if name == 'del':
+                runs = self._collect_inline_runs(child, updated_formatting)
+                if runs:
+                    builder.append_deletion(paragraph, runs)
+                continue
+
+            if name in {'strong', 'b', 'em', 'i', 'u', 'span', 'sup', 'sub', 'code', 's'}:
+                self._append_nodes_to_paragraph(document, paragraph, child, builder, updated_formatting)
+                continue
+
+            if name in {'p', 'div'}:
+                new_paragraph = document.add_paragraph()
+                self._format_paragraph(new_paragraph)
+                self._append_nodes_to_paragraph(document, new_paragraph, child, builder)
+                continue
+
+            if name in {'ul', 'ol'}:
+                style = 'List Number' if name == 'ol' else 'List Bullet'
+                for li in child.find_all('li', recursive=False):
+                    list_paragraph = document.add_paragraph(style=style)
+                    self._format_paragraph(list_paragraph)
+                    self._append_nodes_to_paragraph(document, list_paragraph, li, builder)
+                continue
+
+            if name.startswith('h') and name[1:].isdigit():
+                level = int(name[1:])
+                heading_paragraph = document.add_paragraph()
+                try:
+                    self.styles.apply_heading(heading_paragraph, level)
+                except ValueError:
+                    self._format_paragraph(heading_paragraph)
+                self._append_nodes_to_paragraph(document, heading_paragraph, child, builder)
+                continue
+
+            self._append_nodes_to_paragraph(document, paragraph, child, builder, updated_formatting)
+
+    def _collect_inline_runs(
+        self,
+        element,
+        formatting: Dict[str, object],
+    ) -> List[Dict[str, object]]:
+        runs: List[Dict[str, object]] = []
+        for child in element.children:
+            if isinstance(child, NavigableString):
+                text = str(child)
+                if text:
+                    runs.append(self._build_run_dict(text, formatting))
+                continue
+
+            if not getattr(child, 'name', None):
+                continue
+
+            name = child.name.lower()
+            if name == 'br':
+                runs.append({'break': True})
+                continue
+
+            nested_formatting = self._derive_formatting(formatting, child)
+
+            if name in {'ins', 'del'}:
+                runs.extend(self._collect_inline_runs(child, nested_formatting))
+                continue
+
+            runs.extend(self._collect_inline_runs(child, nested_formatting))
+
+        return runs
+
+    @staticmethod
+    def _build_run_dict(text: str, formatting: Dict[str, object]) -> Dict[str, object]:
+        run: Dict[str, object] = {'text': text}
+        run.update({k: v for k, v in formatting.items() if v})
+        return run
+
+    @staticmethod
+    def _derive_formatting(
+        base: Dict[str, object], element
+    ) -> Dict[str, object]:
+        fmt = dict(base)
+        name = element.name.lower()
+
+        if name in {'strong', 'b'}:
+            fmt['bold'] = True
+        if name in {'em', 'i'}:
+            fmt['italic'] = True
+        if name == 'u':
+            fmt['underline'] = True
+        if name in {'s', 'strike'}:
+            fmt['strike'] = True
+        if name == 'code':
+            fmt['font'] = 'Courier New'
+            fmt['size'] = 10
+
+        style_attr = element.get('style')
+        if style_attr:
+            for rule in style_attr.split(';'):
+                if ':' not in rule:
+                    continue
+                key, value = rule.split(':', 1)
+                key = key.strip().lower()
+                value = value.strip().lower()
+                if key == 'font-weight' and 'bold' in value:
+                    fmt['bold'] = True
+                elif key == 'font-style' and 'italic' in value:
+                    fmt['italic'] = True
+                elif key == 'text-decoration':
+                    if 'underline' in value:
+                        fmt['underline'] = True
+                    if 'line-through' in value:
+                        fmt['strike'] = True
+                elif key == 'font-family':
+                    fmt['font'] = value.strip("'\"")
+                elif key == 'font-size':
+                    size_value = value.replace('pt', '').strip()
+                    try:
+                        fmt['size'] = float(size_value)
+                    except ValueError:
+                        pass
+                elif key == 'color':
+                    fmt['color'] = value.lstrip('#')
+
+        return fmt
+
+    @staticmethod
+    def _apply_run_formatting(run, formatting: Dict[str, object]) -> None:
+        if formatting.get('bold'):
+            run.bold = True
+        if formatting.get('italic'):
+            run.italic = True
+        if formatting.get('underline'):
+            run.underline = True
+        if formatting.get('strike'):
+            run.font.strike = True
+        if font := formatting.get('font'):
+            run.font.name = str(font)
+        if size := formatting.get('size'):
+            try:
+                run.font.size = Pt(float(size))
+            except (TypeError, ValueError):
+                pass
+        if color := formatting.get('color'):
+            try:
+                hex_color = str(color).lstrip('#')
+                if len(hex_color) == 6:
+                    run.font.color.rgb = RGBColor.from_string(hex_color.upper())
+            except Exception:
+                pass
 
     def _add_table(self, doc: DocumentType, data: list[list[str]]) -> None:
         if not data:

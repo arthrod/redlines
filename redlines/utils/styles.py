@@ -57,6 +57,13 @@ class Styles:
         """Update configuration in-place."""
         self._deep_update(self.config, overrides)
 
+    def get_diff_palette(self, style: Optional[str]) -> Dict[str, str]:
+        """Return colour palette for diff highlights."""
+        palettes: Dict[str, Dict[str, str]] = self.config.get('diff_styles', {})
+        if style and style in palettes:
+            return palettes[style]
+        return palettes.get('red_green', {'insert': '#00875a', 'delete': '#b00020'})
+
     # DOCX helpers ------------------------------------------------------
     def apply_paragraph_defaults(self, paragraph) -> None:
         """Apply base font + justification to a python-docx paragraph."""
@@ -189,6 +196,11 @@ class Styles:
             'paragraph': {
                 'line_spacing': 1.2,
                 'space_after_pts': 6,
+            },
+            'diff_styles': {
+                'red_green': {'insert': '#00875a', 'delete': '#b00020'},
+                'red_blue': {'insert': '#1d4ed8', 'delete': '#b00020'},
+                'red': {'insert': '#b00020', 'delete': '#b00020'},
             },
             'header': {
                 'enabled': False,

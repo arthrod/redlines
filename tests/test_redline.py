@@ -191,6 +191,13 @@ def test_markdown_style() -> None:
     test = Redlines(test_string_1, markdown_style='red')
     assert test.compare(test_string_2) == expected_md
 
+    expected_md = (
+        "The quick brown fox <span style='color:red;font-weight:700;text-decoration:line-through;'>jumps "
+        "over </span><span style='color:blue;font-weight:700;'>walks past </span>the lazy dog."
+    )
+    test = Redlines(test_string_1, markdown_style='red_blue')
+    assert test.compare(test_string_2) == expected_md
+
     # Test default custom css styles
     expected_md = (
         "The quick brown fox <span class='redline-deleted'>jumps "

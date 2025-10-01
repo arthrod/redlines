@@ -55,13 +55,22 @@ class HTMLProcessor:
 
     async def html_document_to_text(self, html_document: str) -> str:
         soup = BeautifulSoup(html_document, 'html.parser')
-        return soup.get_text('\n', strip=True)
+        target = soup.body or soup
+        return target.get_text('\n', strip=True)
 
     async def sanitize_html(self, html_document: str) -> str:
         """Remove script/style tags and return safe HTML."""
         soup = BeautifulSoup(html_document, 'html.parser')
         for tag in soup(['script', 'style']):
             tag.decompose()
+        for element in soup.find_all(True):
+            attrs = dict(element.attrs)
+            for attr, value in attrs.items():
+                lowered = attr.lower()
+                if lowered.startswith('on') or (
+                    isinstance(value, str) and value.strip().lower().startswith('javascript:')
+                ):
+                    element.attrs.pop(attr, None)
         return str(soup)
 
     async def escape_text_to_html(self, text: str) -> str:

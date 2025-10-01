@@ -282,6 +282,11 @@ class Redlines:
                     'ins': ("<span style='color:red;font-weight:700;'>", '</span>'),
                     'del': ("<span style='color:red;font-weight:700;text-decoration:line-through;'>", '</span>'),
                 }
+            elif style in {'red-blue', 'red_blue'}:
+                md_styles = {
+                    'ins': ("<span style='color:blue;font-weight:700;'>", '</span>'),
+                    'del': ("<span style='color:red;font-weight:700;text-decoration:line-through;'>", '</span>'),
+                }
             elif style == 'custom_css':
                 ins_class = self.options.get('ins_class', 'redline-inserted')
                 del_class = self.options.get('del_class', 'redline-deleted')
@@ -415,6 +420,13 @@ class Redlines:
         return stripped.startswith('<') or '</' in stripped
 
     @staticmethod
+    def _resolve_library_version() -> str:
+        try:
+            return version('redlines')
+        except PackageNotFoundError:  # pragma: no cover - local development fallback
+            return '0.0.0-dev'
+
+    @staticmethod
     def _build_styles(option: Any) -> Styles:
         """Construct a :class:`Styles` instance from user input."""
         if isinstance(option, Styles):
@@ -436,6 +448,13 @@ class Redlines:
     def output_rich(self) -> Text:
         """Returns the delta in text with colors/style for the console."""
         console_text = Text()
+        style_option = self.options.get('markdown_style') if isinstance(self.options, dict) else None
+        insert_style = 'green'
+        delete_style = 'strike red'
+        if style_option == 'red':
+            insert_style = 'red'
+        elif style_option in {'red-blue', 'red_blue'}:
+            insert_style = 'blue'
 
         for redline in self.redlines:
             tag, i1, i2, j1, j2 = redline.opcodes
@@ -450,23 +469,105 @@ class Redlines:
                 temp_str = ''.join(test_tokens[j1:j2])
                 splits = temp_str.split('¶ ')
                 for split in splits:
-                    console_text.append(split, 'green')
+                    console_text.append(split, insert_style)
             elif tag == 'delete':
-                console_text.append(''.join(source_tokens[i1:i2]), 'strike red')
+                console_text.append(''.join(source_tokens[i1:i2]), delete_style)
             elif tag == 'replace':
-                console_text.append(''.join(source_tokens[i1:i2]), 'strike red')
+                console_text.append(''.join(source_tokens[i1:i2]), delete_style)
                 temp_str = ''.join(test_tokens[j1:j2])
                 splits = temp_str.split('¶ ')
                 for split in splits:
-                    console_text.append(split, 'green')
+                    console_text.append(split, insert_style)
 
         return console_text
+
+    @property
+    def output_json(self) -> dict[str, Any]:
+        """Return a structured JSON-serialisable diff payload."""
+        changes: list[DiffChange] = []
+        insertions = deletions = replacements = equals = 0
+
+        for redline in self.redlines:
+            payload = redline.to_dict()
+            change_type = payload['type']
+
+            if change_type == 'insert':
+                insertions += 1
+            elif change_type == 'delete':
+                deletions += 1
+            elif change_type == 'replace':
+                replacements += 1
+            else:
+                equals += 1
+
+            source_meta = payload['source'].get('metadata') or {}
+            test_meta = payload['test'].get('metadata') or {}
+
+            source_segment = DiffSegment(
+                start=payload['source'].get('start'),
+                end=payload['source'].get('end'),
+                text=payload['source'].get('text'),
+                xpath=source_meta.get('xpath'),
+            )
+            test_segment = DiffSegment(
+                start=payload['test'].get('start'),
+                end=payload['test'].get('end'),
+                text=payload['test'].get('text'),
+                xpath=test_meta.get('xpath'),
+            )
+
+            metadata = payload.get('metadata', {}) or {}
+            if source_meta:
+                metadata = {**metadata, 'source': source_meta}
+            if test_meta:
+                metadata = {**metadata, 'test': test_meta}
+
+            changes.append(
+                DiffChange(
+                    type=change_type,  # type: ignore[arg-type]
+                    source=source_segment,
+                    test=test_segment,
+                    metadata=metadata,
+                )
+            )
+
+        total_changes = len(changes)
+        summary = DiffSummary(
+            total_changes=total_changes,
+            insertions=insertions,
+            deletions=deletions,
+            replacements=replacements,
+            equals=equals,
+        )
+
+        library_version = self._resolve_library_version()
+        style = self.options.get('markdown_style') if isinstance(self.options, dict) else None
+        processor_name = type(self.processor).__name__
+        palette = self.styles.get_diff_palette(style)
+
+        metadata = DiffMetadata(
+            library_version=library_version,
+            style=style,
+            processor=processor_name,
+            palette=palette,
+            structural_diff=self._structural_diff,
+        )
+
+        result = DiffResult(metadata=metadata, summary=summary, changes=changes)
+        return result.model_dump(mode='json')
+
+    def to_json_file(self, path: str | Path, *, indent: int = 2) -> Path:
+        """Persist :pyattr:`output_json` to disk."""
+        payload = self.output_json
+        output_path = Path(path)
+        output_path.write_text(json.dumps(payload, indent=indent), encoding='utf-8')
+        return output_path
 
     def compare(self, test: str | None = None, output: str = 'markdown', **options):
         """Compare `test` with `source`, and produce a delta in a format specified by `output`.
 
         :param test: Optional test string to compare. If None, uses the test string provided during initialisation.
-        :param output: The format which the delta should be produced. Currently, "markdown" and "rich" are supported. Defaults to "markdown".
+        :param output: The format which the delta should be produced. Currently, "markdown", "rich", and "json" are supported. Defaults to "markdown".
         :return: The delta in the format specified by `output`.
         """
         if options:
@@ -486,4 +587,6 @@ class Redlines:
             return self.output_markdown
         if output == 'rich':
             return self.output_rich
+        if output == 'json':
+            return self.output_json
         return self.output_markdown

@@ -82,6 +82,34 @@ Redlines also features a simple command line tool `redlines` to visualise the di
  Compares the strings SOURCE and TEST and produce a redline in the terminal. 
 ```
 
+### Structured JSON output
+
+`Redlines` can produce a structured diff that captures metadata, summaries, and individual change entries. The
+`output_json` property returns a dictionary compatible with the Pydantic models exposed in `redlines.models`.
+
+```python
+from redlines import Redlines
+
+diff = Redlines('alpha beta', 'alpha brave beta', markdown_style='red_blue')
+payload = diff.output_json
+print(payload['summary'])  # {'total_changes': 2, 'insertions': 1, ...}
+
+# Persist as JSON
+diff.to_json_file('diff.json')
+```
+
+The CLI mirrors this behaviour with the `--output-json` flag:
+
+```
+redlines markdown source.txt revised.txt --style red_blue --output-json diff.json
+```
+
+### FastAPI integration
+
+The `redlines.api.RedlinesAPI` helper wires the library into a ready-to-serve FastAPI router. The example at
+`examples/fastapi_example.py` demonstrates how to expose `/redlines/diff`, `/redlines/convert`, and `/redlines/health`
+endpoints in just a few lines of code.
+
 You may also want to check out the demo project [redlines-textual](https://github.com/houfu/redlines-textual).
 
 ## Documentation
@@ -98,4 +126,3 @@ You may also want to check out the demo project [redlines-textual](https://githu
 ## License
 
 MIT License
-

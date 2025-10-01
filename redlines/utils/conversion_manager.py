@@ -6,6 +6,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Optional
 
+from bs4 import BeautifulSoup
+
 from .docx_processor import DOCXProcessor, DocxProcessingMethod
 from .html_processor import HTMLProcessor
 from .markdown_processor import MarkdownProcessor
@@ -55,9 +57,9 @@ class ConversionManager:
 
     The manager centralises the orchestration logic so callers interact with a
     single facade instead of juggling the PDF, HTML, DOCX and Markdown
-    processors individually.  All conversions go through Markdown as the pivot
-    format which keeps the cross-product of conversions manageable and easy to
-    reason about.
+    processors individually.  Conversions pivot through HTML as the
+    intermediary representation to preserve formatting fidelity across output
+    channels.
     """
 
     def __init__(
@@ -79,11 +81,17 @@ class ConversionManager:
             preferred_method=docx_method,
             max_concurrent_operations=max_concurrent_operations,
         )
-        self.pdf_processor = pdf_processor or PDFProcessor(
-            styles=self.styles,
-            markdown_processor=self.markdown_processor,
-            max_concurrent_operations=max_concurrent_operations,
-        )
+        if pdf_processor is not None:
+            self.pdf_processor = pdf_processor
+        else:
+            try:
+                self.pdf_processor = PDFProcessor(
+                    styles=self.styles,
+                    markdown_processor=self.markdown_processor,
+                    max_concurrent_operations=max_concurrent_operations,
+                )
+            except RuntimeError:
+                self.pdf_processor = None
         self.html_processor = html_processor or HTMLProcessor(
             styles=self.styles,
             markdown_processor=self.markdown_processor,
@@ -109,14 +117,14 @@ class ConversionManager:
         """
         src_fmt = Format.normalize(source_format)
         tgt_fmt = Format.normalize(target_format)
-        markdown = await self._to_markdown(data, src_fmt)
-        return await self._from_markdown(markdown, tgt_fmt, metadata)
+        html_document = await self._to_html_document(data, src_fmt)
+        return await self._from_html_document(html_document, tgt_fmt, metadata)
 
     async def extract_text(self, data: Any, source_format: str) -> str:
         """Return plain text extracted from ``data`` in ``source_format``."""
         src_fmt = Format.normalize(source_format)
-        markdown = await self._to_markdown(data, src_fmt)
-        return await self.markdown_processor.to_text(markdown)
+        html_document = await self._to_html_document(data, src_fmt)
+        return await self.html_processor.html_document_to_text(html_document)
 
     def convert_sync(
         self,
@@ -140,41 +148,85 @@ class ConversionManager:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
-    async def _to_markdown(self, data: Any, fmt: Format) -> str:
-        """Convert ``data`` in ``fmt`` to Markdown, dispatching to processors."""
-        if fmt is Format.MARKDOWN:
-            return self._ensure_text(data)
+    async def _to_html_document(self, data: Any, fmt: Format) -> str:
+        """Convert ``data`` of type ``fmt`` into a sanitised HTML document."""
+        if fmt is Format.HTML:
+            html_text = self._ensure_text(data)
+            sanitized = await self.html_processor.sanitize_html(html_text)
+            if '<html' in sanitized.lower():
+                return sanitized
+            return await self.html_processor.html_fragment_to_document(sanitized)
+
         if fmt is Format.TEXT:
             text = self._ensure_text(data)
-            return await self.markdown_processor.from_text(text)
-        if fmt is Format.HTML:
-            html = self._ensure_text(data)
-            return await self.markdown_processor.from_html(html)
+            return await self.html_processor.text_to_html_document(text)
+
+        if fmt is Format.MARKDOWN:
+            markdown = self._ensure_text(data)
+            return await self.html_processor.markdown_to_html_document(markdown)
+
         if fmt is Format.DOCX:
             payload = self._ensure_bytes(data, fmt)
-            return await self.docx_processor.docx_to_markdown(payload)
+            html_content = await self.docx_processor.docx_to_html(payload)
+            sanitized = await self.html_processor.sanitize_html(html_content)
+            sanitized = self._strip_leading_placeholders(sanitized)
+            if '<html' in sanitized.lower():
+                return sanitized
+            return await self.html_processor.html_fragment_to_document(sanitized)
+
         if fmt is Format.PDF:
             payload = self._ensure_bytes(data, fmt)
-            return await self.pdf_processor.pdf_to_markdown(payload)
+            if self.pdf_processor is None:
+                raise RuntimeError('PDF conversion backend is unavailable.')
+            html_content = await self.pdf_processor.pdf_to_html(payload)
+            sanitized = await self.html_processor.sanitize_html(html_content)
+            if '<html' in sanitized.lower():
+                return sanitized
+            return await self.html_processor.html_fragment_to_document(sanitized)
+
         msg = f'Unsupported conversion from format {fmt.value}'
         raise ValueError(msg)
 
-    async def _from_markdown(
-        self, markdown: str, fmt: Format, metadata: Optional[dict[str, Any]]
+    async def _from_html_document(
+        self, html_document: str, fmt: Format, metadata: Optional[dict[str, Any]]
     ) -> Any:
-        """Generate the desired format ``fmt`` from a Markdown string."""
-        if fmt is Format.MARKDOWN:
-            return markdown
-        if fmt is Format.TEXT:
-            return await self.markdown_processor.to_text(markdown)
+        """Generate the desired ``fmt`` output from an HTML document."""
         if fmt is Format.HTML:
-            return await self.html_processor.markdown_to_html_document(markdown, metadata=metadata)
+            return html_document
+        if fmt is Format.TEXT:
+            return await self.html_processor.html_document_to_text(html_document)
+        if fmt is Format.MARKDOWN:
+            return await self.markdown_processor.from_html(html_document)
         if fmt is Format.DOCX:
-            return await self.docx_processor.markdown_to_docx(markdown)
+            return await self.docx_processor.html_to_docx(html_document)
         if fmt is Format.PDF:
-            return await self.pdf_processor.markdown_to_pdf(markdown, metadata=metadata)
+            if self.pdf_processor is None:
+                raise RuntimeError('PDF conversion backend is unavailable.')
+            return await self.pdf_processor.html_to_pdf(
+                html_document,
+                metadata=metadata,
+                treat_as_fragment=False,
+            )
         msg = f'Unsupported conversion to format {fmt.value}'
         raise ValueError(msg)
+
+    @staticmethod
+    def _strip_leading_placeholders(markup: str) -> str:
+        """Remove docling boilerplate paragraphs such as a leading 'document' entry."""
+        soup = BeautifulSoup(markup, 'html.parser')
+        while soup.contents:
+            node = soup.contents[0]
+            if isinstance(node, str):
+                if node.strip():
+                    break
+                node.extract()
+                continue
+            text = node.get_text(strip=True).lower()
+            if text == 'document':
+                node.decompose()
+                continue
+            break
+        return str(soup)
 
     @staticmethod
     def _ensure_text(data: Any) -> str:

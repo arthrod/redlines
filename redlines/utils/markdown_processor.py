@@ -157,13 +157,20 @@ class MarkdownProcessor:
         if not document:
             return None
 
-        for extractor in ('export_to_markdown', 'export_to_text'):
+        for extractor in ('export_to_html', 'export_to_markdown', 'export_to_text'):
             if hasattr(document, extractor):
                 try:
                     result_text = await asyncio.to_thread(getattr(document, extractor))
-                    if result_text and result_text.strip():
-                        logger.info('Docling %s succeeded for %s', extractor, name)
-                        return result_text
+                    if not result_text or not str(result_text).strip():
+                        continue
+                    if extractor == 'export_to_html':
+                        markdown_result = await self._html_to_markdown_async(str(result_text))
+                        if markdown_result.strip():
+                            logger.info('Docling %s succeeded for %s', extractor, name)
+                            return markdown_result
+                        continue
+                    logger.info('Docling %s succeeded for %s', extractor, name)
+                    return str(result_text)
                 except Exception as exc:  # pragma: no cover - docling heavy path
                     logger.debug('Docling %s failed for %s: %s', extractor, name, exc)
         return None
@@ -184,6 +191,11 @@ class MarkdownProcessor:
         except Exception as exc:  # pragma: no cover - optional dependency path
             logger.debug('MarkItDown conversion failed: %s', exc)
         return None
+
+    async def _html_to_markdown_async(self, html_content: str) -> str:
+        if markdownify is None:
+            return ''
+        return await asyncio.to_thread(markdownify.markdownify, html_content, heading_style='ATX')
 
     async def _python_docx_to_markdown(self, payload: bytes) -> str:
         """Final DOCX fallback using :mod:`python-docx` when other tools fail."""
