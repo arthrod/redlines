@@ -1,14 +1,14 @@
 from redlines import Redlines
 
 
-def test_PlainTextFile_text():
+def test_PlainTextFile_text() -> None:
     from redlines import PlainTextFile
 
-    source = PlainTextFile("tests/documents/PlainTextFile/source.txt")
-    assert source.text == "The quick brown fox jumps over the lazy dog."
+    source = PlainTextFile('tests/documents/PlainTextFile/source.txt')
+    assert source.text == 'The quick brown fox jumps over the lazy dog.'
 
-    test = PlainTextFile("tests/documents/PlainTextFile/test.txt")
-    assert test.text == "The quick brown fox walks past the lazy dog."
+    test = PlainTextFile('tests/documents/PlainTextFile/test.txt')
+    assert test.text == 'The quick brown fox walks past the lazy dog.'
 
     redline = Redlines(source, test)
     assert (

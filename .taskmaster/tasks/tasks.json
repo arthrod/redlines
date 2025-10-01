@@ -1,0 +1,414 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": 1,
+        "title": "Update pyproject.toml dependencies for xmldiff and FastAPI integration",
+        "description": "Add required dependencies: xmldiff>=2.7.0, lxml>=5.0.0, fastapi>=0.115.0, pydantic>=2.0.0 to pyproject.toml",
+        "details": "Add new optional dependency group 'api' containing fastapi and pydantic. Add xmldiff and lxml to core dependencies. Update existing dependency groups to maintain backward compatibility. Follow existing pyproject.toml structure with proper version pinning.",
+        "testStrategy": "Verify dependencies install correctly, no version conflicts, existing tests still pass",
+        "priority": "high",
+        "dependencies": [],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 2,
+        "title": "Create Pydantic models for API and JSON structured output",
+        "description": "Create redlines/models.py with Pydantic V2 models for API requests, responses, and JSON diff output structure",
+        "details": "Define DiffEntry(type: str, indices: tuple, content: str), RedlineOutput(metadata: dict, diffs: List[DiffEntry]), API request/response models following FastAPI patterns. Use Pydantic V2 with proper field validation, examples, and docstrings.",
+        "testStrategy": "Unit tests for model validation, serialization, edge cases with invalid data",
+        "priority": "high",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 3,
+        "title": "Create XmlDiffProcessor class implementing RedlinesProcessor interface",
+        "description": "Implement redlines/xmldiff_processor.py with intelligent HTML/XML diffing using xmldiff library",
+        "details": "Create XmlDiffProcessor extending RedlinesProcessor ABC. Configure text_tags=['p','h1','h2','h3','h4','h5','h6','li'] and formatting_tags=['b','i','strike','span','em']. Implement process() method using xmldiff.diff(). Handle namespace xmlns:diff='http://namespaces.shoobx.com/diff'. Include fallback to SequenceMatcher for non-XML content.",
+        "testStrategy": "Unit tests with HTML/XML samples, compare against SequenceMatcher output, verify namespace handling",
+        "priority": "high",
+        "dependencies": [
+          1,
+          2
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 4,
+        "title": "Create DOCX track changes XML utility module",
+        "description": "Implement redlines/utils/docx_track_changes.py for generating Office Open XML track changes syntax",
+        "details": "Create TrackChangesGenerator class with methods: generate_insertion(text, id, author, timestamp), generate_deletion(text, id, author, timestamp). Use proper XML elements: w:ins, w:del, w:r, w:t, w:delText. Generate unique IDs, ISO 8601 timestamps, configurable author. Return XML fragments compatible with python-docx.",
+        "testStrategy": "Unit tests for XML generation, verify against Office Open XML spec, test with python-docx integration",
+        "priority": "medium",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 5,
+        "title": "Add red-blue markdown style to Styles class",
+        "description": "Extend redlines/utils/styles.py to support 'red-blue' markdown style option alongside existing styles",
+        "details": "Add red-blue style configuration to Styles class. Define deletion_style with red color, insertion_style with blue color. Update style application logic to handle red-blue option. Maintain backward compatibility with existing green-red default style.",
+        "testStrategy": "Unit tests for red-blue style rendering in markdown and HTML output, verify color codes",
+        "priority": "low",
+        "dependencies": [],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 6,
+        "title": "Add output_json property to Redlines class",
+        "description": "Implement structured JSON output property in redlines/redlines.py returning diff metadata and change details",
+        "details": "Add output_json property to Redlines class returning dict with structure: {'metadata': {'timestamp': str, 'version': str, 'style': str}, 'diffs': [{'type': 'insert'|'delete'|'equal', 'indices': (start, end), 'content': str}]}. Include to_json_file(path) method. Use RedlineOutput Pydantic model for validation.",
+        "testStrategy": "Unit tests verifying JSON structure, metadata accuracy, file export functionality, schema validation",
+        "priority": "high",
+        "dependencies": [
+          2,
+          3
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 7,
+        "title": "Integrate xmldiff processor into Redlines class",
+        "description": "Modify redlines/redlines.py to use XmlDiffProcessor when HTML content is detected, with SequenceMatcher fallback",
+        "details": "Add processor selection logic in Redlines.__init__() or property setter. Detect HTML content using BeautifulSoup or regex. Default to XmlDiffProcessor for HTML/XML, SequenceMatcher for plain text. Add processor parameter for manual override. Maintain backward compatibility.",
+        "testStrategy": "Integration tests with HTML vs plain text inputs, verify processor selection, test fallback mechanisms",
+        "priority": "high",
+        "dependencies": [
+          3,
+          6
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 8,
+        "title": "Update Redline dataclass to support to_dict() method for JSON serialization",
+        "description": "Enhance redlines/processor.py Redline dataclass with to_dict() method for structured output",
+        "details": "Add to_dict() method to Redline dataclass returning {'type': self.change_type, 'indices': (self.start_idx, self.end_idx), 'content': self.content}. Update dataclass with proper type hints. Ensure compatibility with existing code using Redline objects.",
+        "testStrategy": "Unit tests for to_dict() serialization, verify all Redline fields included, test with various change types",
+        "priority": "medium",
+        "dependencies": [
+          2
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 9,
+        "title": "Create comprehensive test suite for xmldiff processor",
+        "description": "Implement tests/test_xmldiff_processor.py with full coverage of XmlDiffProcessor functionality",
+        "details": "Test cases: HTML diff processing, XML namespace handling, fallback to SequenceMatcher, tag configuration, error handling with malformed XML. Use parametrized tests for multiple scenarios. Mock xmldiff.diff() for error conditions. Achieve >95% coverage.",
+        "testStrategy": "Pytest with parametrization, coverage measurement, mock objects for external dependencies",
+        "priority": "medium",
+        "dependencies": [
+          3
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 10,
+        "title": "Create test suite for JSON structured output",
+        "description": "Implement tests/test_json_output.py testing output_json property and to_json_file() method",
+        "details": "Test JSON structure validation, metadata accuracy, file export/import round-trips, edge cases with empty diffs, large documents. Verify Pydantic model compatibility. Test with both xmldiff and SequenceMatcher processors. Include performance tests for large outputs.",
+        "testStrategy": "Unit tests with JSON schema validation, file I/O testing, parametrized test cases",
+        "priority": "medium",
+        "dependencies": [
+          6
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 11,
+        "title": "Update ConversionManager to use HTML as intermediary format",
+        "description": "Modify redlines/utils/conversion_manager.py to pivot through HTML instead of Markdown for all conversions",
+        "details": "Replace _to_markdown()/_from_markdown() with _to_html()/_from_html() methods. Update conversion pipeline: SOURCE → HTML → TARGET. Maintain async patterns with asyncio.to_thread. Add HTML validation and sanitization. Keep markdown conversion paths for backward compatibility.",
+        "testStrategy": "Integration tests for all format combinations, compare HTML vs Markdown pipeline outputs, performance benchmarks",
+        "priority": "high",
+        "dependencies": [],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 12,
+        "title": "Enhance HTMLProcessor for use as primary intermediary format",
+        "description": "Extend redlines/utils/html_processor.py capabilities to handle HTML as pivot format for all conversions",
+        "details": "Add robust HTML parsing, cleaning, and validation methods. Improve html_fragment_to_document() for better structure handling. Add methods for preserving formatting during conversions. Enhance error handling and fallbacks. Follow existing async patterns.",
+        "testStrategy": "Unit tests for HTML processing edge cases, malformed HTML handling, format preservation validation",
+        "priority": "medium",
+        "dependencies": [
+          11
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 13,
+        "title": "Update MarkdownProcessor to prefer docling HTML export",
+        "description": "Modify redlines/utils/markdown_processor.py to use docling's export_to_html before export_to_markdown",
+        "details": "Update _docling_to_markdown() to try export_to_html first, then convert HTML to markdown if needed. Maintain existing fallback chain: docling → markitdown → python-docx. Preserve async execution with asyncio.to_thread. Add proper error handling and logging.",
+        "testStrategy": "Integration tests with DOCX/PDF files, verify HTML export works, test fallback mechanisms",
+        "priority": "medium",
+        "dependencies": [
+          11,
+          12
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 14,
+        "title": "Integrate track changes XML generation into DOCXProcessor",
+        "description": "Enhance redlines/utils/docx_processor.py to generate DOCX files with proper track changes XML markup",
+        "details": "Add track_changes parameter to DOCX generation methods. Integrate TrackChangesGenerator for creating w:ins and w:del elements. Modify _markdown_to_docx_manual() to include track changes. Ensure compatibility with python-docx library. Add author and timestamp configuration.",
+        "testStrategy": "Integration tests generating DOCX with track changes, manual verification in Microsoft Word/LibreOffice",
+        "priority": "medium",
+        "dependencies": [
+          4
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 15,
+        "title": "Create FastAPI integration with RedlinesAPI class",
+        "description": "Implement redlines/api.py with FastAPI router providing REST endpoints for diff operations",
+        "details": "Create RedlinesAPI class with FastAPI router. Endpoints: POST /diff (text comparison), POST /convert (format conversion), GET /health (status check). Use Pydantic models for request/response validation. Include proper error handling with HTTPException. Support async operations.",
+        "testStrategy": "API testing with FastAPI TestClient, request/response validation, error handling verification",
+        "priority": "medium",
+        "dependencies": [
+          2,
+          6,
+          7
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 16,
+        "title": "Create comprehensive API test suite",
+        "description": "Implement tests/test_api.py with full coverage of FastAPI endpoints and error scenarios",
+        "details": "Test all endpoints with valid/invalid inputs. Verify Pydantic validation works. Test async operation handling. Include authentication scenarios if applicable. Mock external dependencies. Test OpenAPI documentation generation. Achieve >90% coverage.",
+        "testStrategy": "FastAPI TestClient integration tests, parametrized validation tests, mock objects for dependencies",
+        "priority": "medium",
+        "dependencies": [
+          15
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 17,
+        "title": "Create test suite for DOCX track changes functionality",
+        "description": "Implement tests/test_docx_track_changes.py testing track changes XML generation and integration",
+        "details": "Unit tests for TrackChangesGenerator methods. Integration tests for DOCXProcessor track changes. Verify XML structure against Office Open XML specification. Test ID generation, timestamps, author handling. Include edge cases with special characters and formatting.",
+        "testStrategy": "XML validation tests, DOCX file structure verification, compatibility testing with Office software",
+        "priority": "medium",
+        "dependencies": [
+          4,
+          14
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 18,
+        "title": "Update existing tests for red-blue style support",
+        "description": "Extend tests/test_styles.py and tests/test_redline.py to cover red-blue markdown style option",
+        "details": "Add parametrized tests for red-blue style in both markdown and HTML output. Verify color codes and styling application. Test style consistency across different output methods. Ensure backward compatibility with existing green-red default.",
+        "testStrategy": "Parametrized tests with style variations, visual output verification, CSS color validation",
+        "priority": "low",
+        "dependencies": [
+          5,
+          7
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 19,
+        "title": "Update ConversionManager tests for HTML intermediary format",
+        "description": "Extend tests/test_conversion_manager.py to cover HTML-based conversion pipeline",
+        "details": "Add tests for new HTML conversion methods. Test round-trip conversions: DOCX→HTML→DOCX, PDF→HTML→PDF. Verify content fidelity and performance. Update existing stub processors for HTML support. Test error handling and fallback mechanisms.",
+        "testStrategy": "Round-trip conversion tests, content fidelity verification, performance benchmarks vs markdown pipeline",
+        "priority": "medium",
+        "dependencies": [
+          11,
+          12
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 20,
+        "title": "Create example FastAPI application",
+        "description": "Implement examples/fastapi_example.py demonstrating RedlinesAPI usage in a complete FastAPI app",
+        "details": "Create standalone FastAPI application using RedlinesAPI router. Include CORS configuration, error handling middleware, OpenAPI customization. Add example requests/responses in docstrings. Provide Docker configuration and requirements file.",
+        "testStrategy": "Manual testing of example application, documentation verification, Docker build validation",
+        "priority": "low",
+        "dependencies": [
+          15
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 21,
+        "title": "Create xmldiff usage example",
+        "description": "Implement examples/xmldiff_example.py showing xmldiff processor usage and benefits over SequenceMatcher",
+        "details": "Demonstrate XmlDiffProcessor with HTML/XML content. Show side-by-side comparison with SequenceMatcher. Include performance benchmarks and formatting preservation examples. Add comprehensive comments explaining when to use each processor.",
+        "testStrategy": "Example execution validation, output quality verification, performance measurement accuracy",
+        "priority": "low",
+        "dependencies": [
+          7
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 22,
+        "title": "Update main Redlines class exports and __init__.py",
+        "description": "Modify redlines/__init__.py to export new classes and maintain backward compatibility",
+        "details": "Add XmlDiffProcessor, RedlinesAPI, and new models to __all__ exports. Update module docstring with new capabilities. Ensure import compatibility for existing users. Add version bumping logic if needed.",
+        "testStrategy": "Import tests, backward compatibility verification, documentation accuracy",
+        "priority": "medium",
+        "dependencies": [
+          2,
+          3,
+          15
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 23,
+        "title": "Update CLI to support JSON output format",
+        "description": "Enhance redlines/cli.py to include --output-json flag for structured diff output",
+        "details": "Add --output-json flag to CLI using typer. Support both stdout JSON output and file export with --json-file option. Include pretty printing with --pretty-json. Maintain existing CLI interface compatibility. Add JSON schema validation.",
+        "testStrategy": "CLI integration tests, file output validation, JSON schema compliance, backward compatibility",
+        "priority": "medium",
+        "dependencies": [
+          6
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 24,
+        "title": "Add security measures for XML/HTML input sanitization",
+        "description": "Implement XML External Entity (XXE) prevention and HTML sanitization across all processors",
+        "details": "Configure lxml with resolve_entities=False, no_network=True for XXE prevention. Add HTML sanitization using bleach or similar for user inputs. Implement input size limits and timeout protections. Add security-focused unit tests and documentation.",
+        "testStrategy": "Security testing with malicious XML/HTML inputs, XXE attack prevention verification, input validation testing",
+        "priority": "high",
+        "dependencies": [
+          3,
+          12
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 25,
+        "title": "Performance optimization and benchmarking",
+        "description": "Implement performance benchmarks and optimizations for xmldiff vs SequenceMatcher and HTML vs Markdown pipelines",
+        "details": "Create benchmark suite comparing processors and pipelines. Measure memory usage, execution time for various document sizes. Implement performance optimizations like caching, batching. Add performance regression tests. Document performance characteristics and recommendations.",
+        "testStrategy": "Benchmark test suite, performance regression detection, memory profiling, scalability testing",
+        "priority": "medium",
+        "dependencies": [
+          7,
+          11
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 26,
+        "title": "Update documentation and docstrings for all new features",
+        "description": "Comprehensive documentation update covering JSON output, xmldiff integration, FastAPI support, and red-blue styling",
+        "details": "Update all class and method docstrings with comprehensive examples. Add usage examples for new features. Update module-level documentation. Include migration guide for HTML intermediary format. Add API documentation for FastAPI endpoints.",
+        "testStrategy": "Documentation completeness review, example code validation, docstring format compliance",
+        "priority": "medium",
+        "dependencies": [
+          6,
+          7,
+          15,
+          5
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 27,
+        "title": "Integration testing across all new components",
+        "description": "End-to-end integration tests ensuring all new features work together correctly",
+        "details": "Create comprehensive integration test suite covering: XML diff with JSON output, FastAPI with track changes DOCX, HTML pipeline with red-blue styling. Test cross-component interactions, error propagation, and backward compatibility.",
+        "testStrategy": "End-to-end workflow testing, component interaction validation, error handling verification",
+        "priority": "high",
+        "dependencies": [
+          16,
+          17,
+          18,
+          19
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 28,
+        "title": "Backward compatibility verification and migration testing",
+        "description": "Comprehensive testing to ensure all existing functionality remains intact with new features",
+        "details": "Run full existing test suite against new implementation. Test API compatibility for all public methods. Verify existing CLI commands work unchanged. Test with various Python versions (3.10-3.13). Document any breaking changes and provide migration paths.",
+        "testStrategy": "Regression testing, API compatibility validation, multi-version Python testing, migration path verification",
+        "priority": "high",
+        "dependencies": [
+          27
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 29,
+        "title": "Final code quality assurance and linting",
+        "description": "Complete code review, linting, type checking, and style consistency verification",
+        "details": "Run comprehensive linting with existing project standards. Fix type hint issues, import sorting, docstring formatting. Ensure consistent code style matching existing codebase. Address any security scanner findings. Verify test coverage meets 80% minimum requirement.",
+        "testStrategy": "Automated linting validation, type checking with mypy, code style consistency checks, security scanning",
+        "priority": "medium",
+        "dependencies": [
+          28
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 30,
+        "title": "Final verification and deployment preparation",
+        "description": "Complete manual verification checklist and prepare for git commit/push",
+        "details": "Execute complete verification checklist from PRD section 10. Manual testing: DOCX in Microsoft Word, FastAPI Swagger UI, JSON output validation. Verify no performance degradation, all tests passing, documentation accuracy. Prepare conventional commits and final git push.",
+        "testStrategy": "Manual verification checklist completion, user acceptance testing, deployment readiness validation",
+        "priority": "high",
+        "dependencies": [
+          29
+        ],
+        "status": "pending",
+        "subtasks": []
+      }
+    ],
+    "metadata": {
+      "created": "2025-10-01T03:05:57.394Z",
+      "updated": "2025-10-01T03:05:57.394Z",
+      "description": "Tasks for master context"
+    }
+  }
+}
