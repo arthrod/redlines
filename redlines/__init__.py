@@ -67,8 +67,10 @@ The documentation contains other information on common issues users have faced w
 from . import document, processor, utils
 from .document import Document, PlainTextFile
 from .api import RedlinesAPI
+from .diff_backends import DiffBackend
 from .redlines import Redlines
 from .utils import ConversionManager, Styles
+from .utils.docling_structured_manager import DoclingStructuredConversionManager
 from .xmldiff_processor import XmlDiffProcessor
 
 __all__ = [
@@ -78,6 +80,8 @@ __all__ = [
     'Redlines',
     'RedlinesAPI',
     'Styles',
+    'DiffBackend',
+    'DoclingStructuredConversionManager',
     'XmlDiffProcessor',
     'document',
     'processor',

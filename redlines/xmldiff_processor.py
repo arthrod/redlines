@@ -25,6 +25,9 @@ class XmlDiffProcessor(RedlinesProcessor):
             'fast_match': True,
             'ignored_attrs': ['class', 'style', 'data-*'],
         }
+        self._last_source_html: str = ''
+        self._last_test_html: str = ''
+        self._raw_actions: list[Any] = []
 
     @property
     def structural_diff(self) -> list[dict[str, Any]]:
@@ -43,22 +46,26 @@ class XmlDiffProcessor(RedlinesProcessor):
     # ------------------------------------------------------------------
     def _build_structural_diff(self, source_html: str, test_html: str) -> list[dict[str, Any]]:
         try:
-            left = self._parse_html(source_html)
-            right = self._parse_html(test_html)
+            sanitized_source = self._sanitize_markup(source_html)
+            sanitized_test = self._sanitize_markup(test_html)
+            self._last_source_html = sanitized_source
+            self._last_test_html = sanitized_test
+            left = self._parse_sanitized_html(sanitized_source)
+            right = self._parse_sanitized_html(sanitized_test)
         except ValueError:
             return []
 
         differ = diff.Differ(**self._diff_options)
-        actions_iter = differ.diff(left, right)
-        return [self._action_to_dict(action) for action in actions_iter]
+        actions = list(differ.diff(left, right))
+        self._raw_actions = actions
+        return [self._action_to_dict(action) for action in actions]
 
-    def _parse_html(self, markup: str) -> etree._Element:
+    def _parse_sanitized_html(self, markup: str) -> etree._Element:
         if not markup.strip():
             raise ValueError('Empty markup provided to XmlDiffProcessor')
 
-        sanitized = self._sanitize_markup(markup)
         parser = html.HTMLParser(remove_blank_text=True, remove_comments=True, encoding='utf-8')
-        return html.fromstring(sanitized.encode('utf-8'), parser=parser)
+        return html.fromstring(markup.encode('utf-8'), parser=parser)
 
     @staticmethod
     def _sanitize_markup(markup: str) -> str:
@@ -95,6 +102,14 @@ class XmlDiffProcessor(RedlinesProcessor):
         xpath = tree.getpath(element)
         text_content = ''.join(element.itertext()).strip()
         return {'xpath': xpath, 'text': text_content}
+
+    def get_debug_snapshot(self) -> dict[str, Any]:
+        """Return the latest sanitized HTML and raw actions for debugging."""
+        return {
+            'source_html': self._last_source_html,
+            'test_html': self._last_test_html,
+            'raw_actions': [str(action) for action in self._raw_actions],
+        }
 
 
 __all__ = ['XmlDiffProcessor']

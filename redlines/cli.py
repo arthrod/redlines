@@ -22,7 +22,7 @@ from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
 
-from redlines import Redlines
+from redlines import DiffBackend, Redlines
 
 try:
     PACKAGE_VERSION = version('redlines')
@@ -100,10 +100,22 @@ def text(
     source: str = typer.Argument(..., help='Source text to compare.'),
     test: str = typer.Argument(..., help='Test text to compare against the source.'),
     title: str = typer.Option('Rich diff canvas', help='Panel title for the rendered comparison.'),
+    diff_backend: str = typer.Option(
+        DiffBackend.HTML_TODOCX.value,
+        '--diff-backend',
+        '-b',
+        help='Diff backend to use (htmltodocx, docling, xmldiff).',
+    ),
+    debug_structural: bool = typer.Option(
+        False,
+        '--debug-structural',
+        help='Include structural debugging data in JSON output and metadata.',
+        rich_help_panel='Debug options',
+    ),
 ) -> None:
     """Display a deluxe, panelled diff using Rich layouts."""
     _render_header('Live comparison canvas')
-    diff = Redlines(source, test)
+    diff = Redlines(source, test, diff_backend=diff_backend, debug_structural=debug_structural)
 
     layout = Layout()
     layout.split_column(
@@ -131,10 +143,24 @@ def text(
 def simple_text(
     source: str = typer.Argument(..., help='Source text to compare.'),
     test: str = typer.Argument(..., help='Test text to compare against the source.'),
+    diff_backend: str = typer.Option(
+        DiffBackend.HTML_TODOCX.value,
+        '--diff-backend',
+        '-b',
+        help='Diff backend to use (htmltodocx, docling, xmldiff).',
+    ),
+    debug_structural: bool = typer.Option(
+        False,
+        '--debug-structural',
+        help='Include structural debugging data in JSON output and metadata.',
+        rich_help_panel='Debug options',
+    ),
 ) -> None:
     """Print a concise Rich-formatted diff suitable for piping into other tools."""
     _render_header('Inline diff output')
-    console.print(Redlines(source, test).output_rich)
+    console.print(
+        Redlines(source, test, diff_backend=diff_backend, debug_structural=debug_structural).output_rich
+    )
 
 
 @app.command()
@@ -154,10 +180,28 @@ def markdown(
         help='Write structured diff JSON to a file path (use "-" for stdout).',
         rich_help_panel='Output options',
     ),
+    diff_backend: str = typer.Option(
+        DiffBackend.HTML_TODOCX.value,
+        '--diff-backend',
+        '-b',
+        help='Diff backend to use (htmltodocx, docling, xmldiff).',
+    ),
+    debug_structural: bool = typer.Option(
+        False,
+        '--debug-structural',
+        help='Include structural debugging data in JSON output and metadata.',
+        rich_help_panel='Debug options',
+    ),
 ) -> None:
     """Emit the comparison as Markdown, optionally using alternate styles."""
     _render_header('Markdown delta output')
-    diff = Redlines(source, test, markdown_style=style)
+    diff = Redlines(
+        source,
+        test,
+        markdown_style=style,
+        diff_backend=diff_backend,
+        debug_structural=debug_structural,
+    )
     syntax = Syntax(diff.output_markdown, 'markdown', theme='github-dark', line_numbers=False)
     console.print(syntax)
 

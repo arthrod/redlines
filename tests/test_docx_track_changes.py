@@ -25,7 +25,7 @@ def test_track_changes_builder_creates_elements() -> None:
 
 def test_html_to_docx_emits_track_changes(tmp_path) -> None:
     processor = DOCXProcessor()
-    html = '<p>Hello <ins>friend</ins> and <del>foe</del></p>'
+    html = '<p>Hello <ins><strong>friend</strong></ins> and <del><em>foe</em></del></p>'
 
     docx_bytes = asyncio.run(processor.html_to_docx(html))
     docx_path = tmp_path / 'diff.docx'
@@ -36,3 +36,6 @@ def test_html_to_docx_emits_track_changes(tmp_path) -> None:
 
     assert '<w:ins' in document_xml
     assert '<w:del' in document_xml
+
+    assert '<w:b/>' in document_xml
+    assert '<w:i/>' in document_xml

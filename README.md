@@ -77,10 +77,14 @@ assert (
 Redlines also features a simple command line tool `redlines` to visualise the differences in text in the terminal.
 
 ```
- Usage: redlines text [OPTIONS] SOURCE TEST                                                                                                                                                                                                   
-                                                                                                                                                                                                                                              
+Usage: redlines text [OPTIONS] SOURCE TEST                                                                                                                                                                                                   
+                                                                                                                                                                                                                                             
  Compares the strings SOURCE and TEST and produce a redline in the terminal. 
 ```
+
+All CLI subcommands accept `--diff-backend` to control the conversion pipeline (`htmltodocx` for the default track changes, `docling` for the structured Docling backend, or `xmldiff` for an HTML-only preview).
+
+Enable `--debug-structural` (or set `REDLINES_DEBUG_STRUCT=1`) to capture the sanitised HTML fed to xmldiff along with the raw actions inside the JSON metadata.
 
 ### Structured JSON output
 

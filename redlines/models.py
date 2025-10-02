@@ -52,6 +52,10 @@ class DiffMetadata(BaseModel):
     library_version: str = Field(description="Version of the redlines library that produced the diff")
     style: Optional[str] = Field(default=None, description="Active markdown style applied during diff rendering")
     processor: str = Field(description="Processor implementation that produced the diff output")
+    palette: dict[str, Any] = Field(default_factory=dict, description="Colour palette resolved from the active markdown style")
+    structural_diff: list[dict[str, Any]] = Field(default_factory=list, description="Raw structural diff entries from xmldiff")
+    backend: Optional[str] = Field(default=None, description="Diff backend identifier generating this output")
+    structural_debug: Optional[dict[str, Any]] = Field(default=None, description="Optional debugging payload for structural diffs")
 
 
 class DiffResult(BaseModel):

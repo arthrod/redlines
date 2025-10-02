@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any, Optional, Tuple
 
@@ -8,10 +9,12 @@ from importlib.metadata import PackageNotFoundError, version
 
 from rich.text import Text
 
+from .diff_backends import DiffBackend
 from .document import Document
 from .models import DiffChange, DiffMetadata, DiffResult, DiffSegment, DiffSummary
 from .processor import Redline, WholeDocumentProcessor
 from .utils.conversion_manager import ConversionManager
+from .utils.docling_structured_manager import DoclingStructuredConversionManager
 from .utils.styles import Styles
 from .xmldiff_processor import XmlDiffProcessor
 
@@ -115,6 +118,10 @@ class Redlines:
         source_metadata = options.pop('source_metadata', None)
         test_metadata = options.pop('test_metadata', None)
         conversion_metadata = options.pop('conversion_metadata', None)
+
+        diff_backend_option = options.pop('diff_backend', DiffBackend.HTML_TODOCX)
+        self.diff_backend = DiffBackend.from_value(diff_backend_option)
+        self.debug_structural = bool(options.pop('debug_structural', False))
 
         if conversion_metadata:
             source_metadata = conversion_metadata.get('source', source_metadata)
@@ -406,6 +413,8 @@ class Redlines:
 
     def _should_use_html_processor(self) -> bool:
         fmt_hints = {self._source_format, self._test_format}
+        if self.diff_backend is DiffBackend.XMLDIFF_ONLY:
+            return True
         if any(hint and 'html' in hint.lower() for hint in fmt_hints if hint):
             return True
         source_html = self._source and self._looks_like_html(self._source)
@@ -441,7 +450,10 @@ class Redlines:
     def _get_conversion_manager(self) -> ConversionManager:
         """Return a cached :class:`ConversionManager`, creating one on demand."""
         if self.conversion_manager is None:
-            self.conversion_manager = ConversionManager(styles=self.styles)
+            if self.diff_backend is DiffBackend.DOCLING_STRUCTURED:
+                self.conversion_manager = DoclingStructuredConversionManager(styles=self.styles)
+            else:
+                self.conversion_manager = ConversionManager(styles=self.styles)
         return self.conversion_manager
 
     @property
@@ -545,12 +557,19 @@ class Redlines:
         processor_name = type(self.processor).__name__
         palette = self.styles.get_diff_palette(style)
 
+        debug_enabled = self.debug_structural or bool(os.getenv('REDLINES_DEBUG_STRUCT'))
+        structural_debug: Optional[dict[str, Any]] = None
+        if debug_enabled and isinstance(self.processor, XmlDiffProcessor):
+            structural_debug = self.processor.get_debug_snapshot()
+
         metadata = DiffMetadata(
             library_version=library_version,
             style=style,
             processor=processor_name,
             palette=palette,
             structural_diff=self._structural_diff,
+            backend=self.diff_backend.value,
+            structural_debug=structural_debug,
         )
 
         result = DiffResult(metadata=metadata, summary=summary, changes=changes)
