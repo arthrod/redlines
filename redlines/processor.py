@@ -72,6 +72,17 @@ def concatenate_paragraphs_and_add_chr_182(text: str) -> str:
     return ''.join(result)
 
 
+def split_sentences(text: str) -> list[str]:
+    """
+    Split text into sentences.
+    This uses a regex to split sentences based on punctuation, but tries to avoid splitting on abbreviations.
+    """
+    # Regex to split sentences, handles common abbreviations.
+    sentence_ends = re.compile(r'(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\?|\!)\s')
+    sentences = sentence_ends.split(text)
+    return [s.strip() for s in sentences if s.strip()]
+
+
 @dataclass
 class Chunk:
     """A chunk of text that is being compared. In some cases, it may be the whole document."""
@@ -146,25 +157,69 @@ class RedlinesProcessor(ABC):
 
 
 class WholeDocumentProcessor(RedlinesProcessor):
-    """A redlines processor that compares two documents. It compares the entire documents as a single chunk."""
+    """A redlines processor that compares two documents. It now compares by sentence first, then by words."""
 
     def process(self, source: Union[Document, str], test: Union[Document, str]) -> list[Redline]:
-        """Compare two documents as a single chunk.
+        """Compare two documents by sentences, then by words.
         :param source: The source document to compare.
         :param test: The test document to compare.
         :return: A list of `Redline` that describe the differences between the two documents.
         """
-        # Extract text from documents if needed
         source_text = source.text if isinstance(source, Document) else source
         test_text = test.text if isinstance(test, Document) else test
 
-        # Tokenize the texts
-        source_tokens = tokenize_text(concatenate_paragraphs_and_add_chr_182(source_text))
-        test_tokens = tokenize_text(concatenate_paragraphs_and_add_chr_182(test_text))
+        # Process paragraphs first, then split into sentences
+        source_processed = concatenate_paragraphs_and_add_chr_182(source_text)
+        test_processed = concatenate_paragraphs_and_add_chr_182(test_text)
 
-        # Normalize tokens by stripping whitespace for comparison
-        # This allows the matcher to focus on content differences rather than whitespace variations
-        # while still preserving the original tokens (including whitespace) for display in the output
+        source_sentences = split_sentences(source_processed)
+        test_sentences = split_sentences(test_processed)
+
+        # Fallback to original method if sentence splitting is ineffective
+        if not source_sentences or not test_sentences:
+            return self._process_whole_document(source_processed, test_processed)
+
+        sentence_matcher = SequenceMatcher(None, source_sentences, test_sentences)
+        redlines = []
+
+        for tag, i1, i2, j1, j2 in sentence_matcher.get_opcodes():
+            source_segment_sentences = source_sentences[i1:i2]
+            test_segment_sentences = test_sentences[j1:j2]
+
+            source_segment_text = " ".join(source_segment_sentences)
+            test_segment_text = " ".join(test_segment_sentences)
+
+            # For all cases, we tokenize the segments and generate redlines.
+            # For 'equal' tags, the word-level diff will just produce one big 'equal' opcode.
+            # This simplifies logic and avoids separate handling.
+
+            source_tokens = tokenize_text(source_segment_text)
+            test_tokens = tokenize_text(test_segment_text)
+
+            # Skip empty segments
+            if not source_tokens and not test_tokens:
+                continue
+
+            seq_source_normalized = [token.strip() for token in source_tokens]
+            seq_test_normalized = [token.strip() for token in test_tokens]
+
+            word_matcher = SequenceMatcher(None, seq_source_normalized, seq_test_normalized, autojunk=False)
+
+            for opcode in word_matcher.get_opcodes():
+                redlines.append(
+                    Redline(
+                        source_chunk=Chunk(text=source_tokens, chunk_location=None),
+                        test_chunk=Chunk(text=test_tokens, chunk_location=None),
+                        opcodes=opcode,
+                    )
+                )
+        return redlines
+
+    def _process_whole_document(self, source_text: str, test_text: str) -> list[Redline]:
+        """Original method to compare entire documents as a single chunk."""
+        source_tokens = tokenize_text(source_text)
+        test_tokens = tokenize_text(test_text)
+
         seq_source_normalized = [token.strip() for token in source_tokens]
         seq_test_normalized = [token.strip() for token in test_tokens]
 

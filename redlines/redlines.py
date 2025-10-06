@@ -218,10 +218,10 @@ class Redlines:
 
         | Style | Preview |
         |-------| -------|
-        |red-green (**default**) | "The quick brown fox <span style='color:red;font-weight:700;text-decoration:line-through;'>jumps over </span><span style='color:green;font-weight:700;'>walks past </span>the lazy dog."|
+        |ghfm (GitHub Flavored Markdown) (**default**)| 'The quick brown fox ~~jumps over ~~**walks past **the lazy dog.' |
+        |red-green| "The quick brown fox <span style='color:red;font-weight:700;text-decoration:line-through;'>jumps over </span><span style='color:green;font-weight:700;'>walks past </span>the lazy dog."|
         |none | 'The quick brown fox <del>jumps over </del><ins>walks past </ins>the lazy dog.'|
         |red | "The quick brown fox <span style='color:red;font-weight:700;text-decoration:line-through;'>jumps over </span><span style='color:red;font-weight:700;'>walks past </span>the lazy dog."|
-        |ghfm (GitHub Flavored Markdown)| 'The quick brown fox ~~jumps over ~~**walks past **the lazy dog.' |
         |bbcode (BBCode) | 'The quick brown fox [s][color=red]jumps over [/color][/s][b][color=green]walks past [/color][/b]the lazy dog.' |
         |streamlit | 'The quick brown fox ~~:red[jumps over ]~~ **:green[walks past ]** the lazy dog.' |
 
@@ -245,7 +245,7 @@ class Redlines:
 
         ### Jupyter Notebooks
         This library was first written for the Jupyter notebook environment, so all the available styles, including
-        the default (`red-green`), `red` and `none` work.
+        `red-green`, `red` and `none` work. `ghfm` is the default, but may not render with colors.
 
         ### Streamlit
 
@@ -265,44 +265,44 @@ class Redlines:
         """
         result = []
 
-        # default_style = "red_green"
+        style = self.options.get('markdown_style', 'ghfm')
 
-        md_styles = {
-            'ins': ("<span style='color:green;font-weight:700;'>", '</span>'),
-            'del': ("<span style='color:red;font-weight:700;text-decoration:line-through;'>", '</span>'),
-        }
+        if style == 'none' or style is None:
+            md_styles = {'ins': ('<ins>', '</ins>'), 'del': ('<del>', '</del>')}
+        elif style in ('red-green', 'red_green'):
+            md_styles = {
+                'ins': ("<span style='color:green;font-weight:700;'>", '</span>'),
+                'del': ("<span style='color:red;font-weight:700;text-decoration:line-through;'>", '</span>'),
+            }
+        elif style == 'red':
+            md_styles = {
+                'ins': ("<span style='color:red;font-weight:700;'>", '</span>'),
+                'del': ("<span style='color:red;font-weight:700;text-decoration:line-through;'>", '</span>'),
+            }
+        elif style in {'red-blue', 'red_blue'}:
+            md_styles = {
+                'ins': ("<span style='color:blue;font-weight:700;'>", '</span>'),
+                'del': ("<span style='color:red;font-weight:700;text-decoration:line-through;'>", '</span>'),
+            }
+        elif style == 'custom_css':
+            ins_class = self.options.get('ins_class', 'redline-inserted')
+            del_class = self.options.get('del_class', 'redline-deleted')
 
-        if 'markdown_style' in self.options:
-            style = self.options['markdown_style']
+            elem_attributes = {'ins': f"class='{ins_class}'", 'del': f"class='{del_class}'"}
 
-            if style == 'none' or style is None:
-                md_styles = {'ins': ('<ins>', '</ins>'), 'del': ('<del>', '</del>')}
-            elif style == 'red':
-                md_styles = {
-                    'ins': ("<span style='color:red;font-weight:700;'>", '</span>'),
-                    'del': ("<span style='color:red;font-weight:700;text-decoration:line-through;'>", '</span>'),
-                }
-            elif style in {'red-blue', 'red_blue'}:
-                md_styles = {
-                    'ins': ("<span style='color:blue;font-weight:700;'>", '</span>'),
-                    'del': ("<span style='color:red;font-weight:700;text-decoration:line-through;'>", '</span>'),
-                }
-            elif style == 'custom_css':
-                ins_class = self.options.get('ins_class', 'redline-inserted')
-                del_class = self.options.get('del_class', 'redline-deleted')
-
-                elem_attributes = {'ins': f"class='{ins_class}'", 'del': f"class='{del_class}'"}
-
-                md_styles = {
-                    'ins': (f'<span {elem_attributes["ins"]}>', '</span>'),
-                    'del': (f'<span {elem_attributes["del"]}>', '</span>'),
-                }
-            elif style == 'ghfm':
-                md_styles = {'ins': ('**', '**'), 'del': ('~~', '~~')}
-            elif style == 'bbcode':
-                md_styles = {'ins': ('[b][color=green]', '[/color][/b]'), 'del': ('[s][color=red]', '[/color][/s]')}
-            elif style == 'streamlit':
-                md_styles = {'ins': ('**:green[', ']** '), 'del': ('~~:red[', ']~~ ')}
+            md_styles = {
+                'ins': (f'<span {elem_attributes["ins"]}>', '</span>'),
+                'del': (f'<span {elem_attributes["del"]}>', '</span>'),
+            }
+        elif style == 'ghfm':
+            md_styles = {'ins': ('**', '**'), 'del': ('~~', '~~')}
+        elif style == 'bbcode':
+            md_styles = {'ins': ('[b][color=green]', '[/color][/b]'), 'del': ('[s][color=red]', '[/color][/s]')}
+        elif style == 'streamlit':
+            md_styles = {'ins': ('**:green[', ']** '), 'del': ('~~:red[', ']~~ ')}
+        else:
+            # Fallback to ghfm for unknown styles
+            md_styles = {'ins': ('**', '**'), 'del': ('~~', '~~')}
 
         for redline in self.redlines:
             tag, i1, i2, j1, j2 = redline.opcodes
