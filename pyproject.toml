@@ -1,30 +1,89 @@
 [project]
 name = "redlines"
-version = "0.5.2"
+version = "0.6.0"
 description = "Compare text, and produce human-readable differences or deltas which look like track changes in Microsoft Word."
 readme = "README.md"
 authors = [
     { name = "houfu", email = "houfu@outlook.sg" }
 ]
 license = { text = "MIT" }
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 dependencies = [
-    "click>=8.1.7",
-    "rich-click>=1.6.1",
     "rich>=13.3.5",
+    "mistune>=3.1.4",
+    "beautifulsoup4>=4.12.2",
+    "markdownify>=0.11.6",
+    "xmldiff>=2.7.0",
+    "lxml>=5.0.0",
+    "typer>=0.16.1",
 ]
 urls = { homepage = "https://houfu.github.io/redlines/", repository = "https://github.com/houfu/redlines" }
 
 [project.scripts]
-redlines = 'redlines.cli:cli'
+redlines = 'redlines.cli:app'
 
-[tool.uv]
-dev-dependencies = [
+[project.optional-dependencies]
+dev = [
     "pdoc>=14.1.0",
     "pytest>=7.4.2",
     "pytest-cov>=3.0.0",
     "pytest-sugar>=0.9.7",
     "tox>=3.28.0",
+    "playwright",
+]
+api = [
+    "fastapi>=0.115.0",
+    "pydantic>=2.0.0",
+    "httpx",
+]
+docx = [
+    "python-docx>=1.1.0",
+    "html-for-docx>=0.6.0", # DON'T FUCKING CHANGE TO HTML4DOCX! DON'T REMOVE THE EXPLETIVE FROM THIS LINE!
+    "markitdown[all]>=0.1.3",
+    "docling==2.48.0",
+    "docling-core>=2.45.0",
+    "docling-ibm-models>=3.9.0",
+    "docling-parse>=4.2.3",
+]
+pdf = [
+    "weasyprint>=66.0",
+    "xhtml2pdf>=0.2.17",
+    "arabic-reshaper>=3.0.0",
+    "html5lib>=1.1",
+    "Pillow>=9.0.0",
+    "pyHanko>=0.12.1",
+    "pyhanko-certvalidator>=0.19.5",
+    "pypdf>=3.1.0",
+    "python-bidi>=0.5.0",
+    "reportlab>=4.0.4,<5",
+    "svglib>=1.2.1",
+    "markitdown[all]>=0.1.3",
+    "docling==2.48.0",
+    "docling-core>=2.45.0",
+    "docling-ibm-models>=3.9.0",
+    "docling-parse>=4.2.3",
+]
+all = [
+    "python-docx>=1.1.0",
+    "html-for-docx>=0.6.0", # DON'T FUCKING CHANGE TO HTML4DOCX! DON'T REMOVE THE EXPLETIVE FROM THIS LINE!
+    "weasyprint>=66.0",
+    "xhtml2pdf>=0.2.17",
+    "arabic-reshaper>=3.0.0",
+    "html5lib>=1.1",
+    "Pillow>=9.0.0",
+    "pyHanko>=0.12.1",
+    "pyhanko-certvalidator>=0.19.5",
+    "pypdf>=3.1.0",
+    "python-bidi>=0.5.0",
+    "reportlab>=4.0.4,<5",
+    "svglib>=1.2.1",
+    "markitdown[all]>=0.1.3",
+    "docling==2.48.0",
+    "docling-core>=2.45.0",
+    "docling-ibm-models>=3.9.0",
+    "docling-parse>=4.2.3",
+    "fastapi>=0.115.0",
+    "pydantic>=2.0.0",
 ]
 
 [build-system]

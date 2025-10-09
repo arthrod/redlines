@@ -1,5 +1,4 @@
-"""
-# Redlines
+"""# Redlines.
 
 `Redlines` produces a text showing the differences between two strings/text. The changes are represented with
 strike-throughs and underlines, which looks similar to Microsoft Word's track changes. This method of showing changes is
@@ -65,7 +64,23 @@ The documentation contains other information on common issues users have faced w
 
 """
 
-from .document import *
+from . import document, processor, utils
+from .document import Document, PlainTextFile
+from .api import RedlinesAPI
 from .redlines import Redlines
+from .utils import ConversionManager, Styles
+from .xmldiff_processor import XmlDiffProcessor
 
-__all__ = ["redlines", "document", "processor", "cli"]
+__all__ = [
+    'ConversionManager',
+    'Document',
+    'PlainTextFile',
+    'Redlines',
+    'RedlinesAPI',
+    'Styles',
+    'XmlDiffProcessor',
+    'document',
+    'processor',
+    'redlines',
+    'utils',
+]

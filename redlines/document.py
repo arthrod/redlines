@@ -2,9 +2,8 @@ from abc import ABC, abstractmethod
 
 
 class Document(ABC):
-    """
-    An abstract base class used as a common data interchange with the redlines with formats other than python text strings.
-    To see a basic implementation, you can look at the `PlainTextFile` class for text files
+    """An abstract base class used as a common data interchange with the redlines with formats other than python text strings.
+    To see a basic implementation, you can look at the `PlainTextFile` class for text files.
 
     |Supported File Formats | Class |
     |---| --- |
@@ -14,22 +13,19 @@ class Document(ABC):
     @property
     @abstractmethod
     def text(self) -> str:
-        """
-        This property is used by the redlines library to obtain the text to compare. Implement this method to return
+        """This property is used by the redlines library to obtain the text to compare. Implement this method to return
         the text to be compared by redlines.
         """
-        pass
 
 
 class PlainTextFile(Document):
-    """
-    Use this class so that Redlines can read plain text files.
+    """Use this class so that Redlines can read plain text files.
 
     ```python
     from redlines import PlainTextFile
 
-    source = PlainTextFile("tests/documents/PlainTextFile/source.txt")
-    test = PlainTextFile("tests/documents/PlainTextFile/test.txt")
+    source = PlainTextFile('tests/documents/PlainTextFile/source.txt')
+    test = PlainTextFile('tests/documents/PlainTextFile/test.txt')
 
     redline = Redlines(source, test)
     assert (
@@ -42,16 +38,13 @@ class PlainTextFile(Document):
 
     @property
     def text(self) -> str:
-        """
-        :return: The text of the file referred to when the Document was created.
-        """
+        """:return: The text of the file referred to when the Document was created."""
         return self._text
 
-    def __init__(self, file_path):
-        """
-        Use this class so that Redlines can read plain text files.
+    def __init__(self, file_path) -> None:
+        """Use this class so that Redlines can read plain text files.
 
         :param file_path: Path to the text file.
         """
-        with open(file_path) as f:
+        with open(file_path, encoding='utf-8') as f:
             self._text = f.read()
