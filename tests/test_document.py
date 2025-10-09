@@ -13,5 +13,5 @@ def test_PlainTextFile_text() -> None:
     redline = Redlines(source, test)
     assert (
         redline.output_markdown
-        == "The quick brown fox <span style='color:red;font-weight:700;text-decoration:line-through;'>jumps over </span><span style='color:green;font-weight:700;'>walks past </span>the lazy dog."
+        == "The quick brown fox ~~jumps~~**walks** ~~over~~**past** the lazy dog."
     )

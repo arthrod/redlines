@@ -64,7 +64,7 @@ def test_redline_delete_md(test_string_1, test_string_2, expected_md) -> None:
         (
             'The quick brown fox jumps over the lazy dog.',
             'The quick brown fox walks past the lazy dog.',
-            'The quick brown fox <del>jumps over </del><ins>walks past </ins>the lazy dog.',
+            'The quick brown fox <del>jumps</del><ins>walks</ins> <del>over</del><ins>past</ins> the lazy dog.',
         )
     ],
 )
@@ -111,7 +111,7 @@ def test_redline_delete_rich(test_string_1, test_string_2, expected_rich) -> Non
             'The quick brown fox jumps over the lazy dog.',
             'The quick brown fox walks past the lazy dog.',
             Text.from_markup(
-                'The quick brown fox [red strike]jumps over [/red strike][green]walks past [/green]the lazy dog.'
+                'The quick brown fox [red strike]jumps[/red strike][green]walks[/green] [red strike]over[/red strike][green]past[/green] the lazy dog.'
             ),
         )
     ],
@@ -124,9 +124,9 @@ def test_redline_replace_rich(test_string_1, test_string_2, expected_rich) -> No
 def test_compare() -> None:
     test_string_1 = 'The quick brown fox jumps over the lazy dog.'
     test_string_2 = 'The quick brown fox walks past the lazy dog.'
-    expected_md = 'The quick brown fox <del>jumps over </del><ins>walks past </ins>the lazy dog.'
+    expected_md = 'The quick brown fox <del>jumps</del><ins>walks</ins> <del>over</del><ins>past</ins> the lazy dog.'
     expected_rich = Text.from_markup(
-        'The quick brown fox [red strike]jumps over [/red strike][green]walks past [/green]the lazy dog.'
+        'The quick brown fox [red strike]jumps[/red strike][green]walks[/green] [red strike]over[/red strike][green]past[/green] the lazy dog.'
     )
     test = Redlines(test_string_1, markdown_style='none')
     assert test.compare(test_string_2) == expected_md
@@ -165,69 +165,65 @@ def test_markdown_style() -> None:
     # Test default - "red green"
     test_string_1 = 'The quick brown fox jumps over the lazy dog.'
     test_string_2 = 'The quick brown fox walks past the lazy dog.'
-    expected_md = "The quick brown fox <span style='color:red;font-weight:700;text-decoration:line-through;'>jumps over </span><span style='color:green;font-weight:700;'>walks past </span>the lazy dog."
-    test = Redlines(test_string_1)
+    expected_md = "The quick brown fox ~~jumps~~**walks** ~~over~~**past** the lazy dog."
+    test = Redlines(test_string_1, markdown_style='red-green')
     assert test.compare(test_string_2) == expected_md
 
     # Test None style
     test_string_1 = 'The quick brown fox jumps over the lazy dog.'
     test_string_2 = 'The quick brown fox walks past the lazy dog.'
-    expected_md = 'The quick brown fox <del>jumps over </del><ins>walks past </ins>the lazy dog.'
+    expected_md = 'The quick brown fox <del>jumps</del><ins>walks</ins> <del>over</del><ins>past</ins> the lazy dog.'
     test = Redlines(test_string_1, markdown_style=None)
     assert test.compare(test_string_2) == expected_md
 
     # Test "none" style
     test_string_1 = 'The quick brown fox jumps over the lazy dog.'
     test_string_2 = 'The quick brown fox walks past the lazy dog.'
-    expected_md = 'The quick brown fox <del>jumps over </del><ins>walks past </ins>the lazy dog.'
+    expected_md = 'The quick brown fox <del>jumps</del><ins>walks</ins> <del>over</del><ins>past</ins> the lazy dog.'
     test = Redlines(test_string_1, markdown_style='none')
     assert test.compare(test_string_2) == expected_md
 
     # Test one of the provided markdown styles
     expected_md = (
-        "The quick brown fox <span style='color:red;font-weight:700;text-decoration:line-through;'>jumps "
-        "over </span><span style='color:red;font-weight:700;'>walks past </span>the lazy dog."
+        "The quick brown fox ~~jumps~~**walks** ~~over~~**past** the lazy dog."
     )
     test = Redlines(test_string_1, markdown_style='red')
     assert test.compare(test_string_2) == expected_md
 
     expected_md = (
-        "The quick brown fox <span style='color:red;font-weight:700;text-decoration:line-through;'>jumps "
-        "over </span><span style='color:blue;font-weight:700;'>walks past </span>the lazy dog."
+        "The quick brown fox ~~jumps~~**walks** ~~over~~**past** the lazy dog."
     )
     test = Redlines(test_string_1, markdown_style='red_blue')
     assert test.compare(test_string_2) == expected_md
 
     # Test default custom css styles
     expected_md = (
-        "The quick brown fox <span class='redline-deleted'>jumps "
-        "over </span><span class='redline-inserted'>walks past </span>the lazy dog."
+        'The quick brown fox <span class="redline-deleted">jumps</span><span class="redline-inserted">walks</span> <span class="redline-deleted">over</span><span class="redline-inserted">past</span> the lazy dog.'
     )
     test = Redlines(test_string_1, markdown_style='custom_css')
     assert test.compare(test_string_2) == expected_md
 
     # Test custom css styles with custom names
     expected_md = (
-        "The quick brown fox <span class='deleted'>jumps "
-        "over </span><span class='inserted'>walks past </span>the lazy dog."
+        'The quick brown fox <span class="deleted">jumps</span><span class="inserted">walks</span> <span class="deleted">over</span><span class="inserted">past</span> the lazy dog.'
     )
     test = Redlines(test_string_1, markdown_style='custom_css', ins_class='inserted', del_class='deleted')
     assert test.compare(test_string_2) == expected_md
 
     # Test ghfm (GitHub Flavored Markdown) style
-    expected_md = 'The quick brown fox ~~jumps over ~~**walks past **the lazy dog.'
+    expected_md = 'The quick brown fox ~~jumps~~**walks** ~~over~~**past** the lazy dog.'
     test = Redlines(test_string_1, markdown_style='ghfm')
     assert test.compare(test_string_2) == expected_md
 
     # Test bbcode (BBCode) style
     expected_md = (
-        'The quick brown fox [s][color=red]jumps over [/color][/s][b][color=green]walks past [/color][/b]the lazy dog.'
+        'The quick brown fox [s][color=red]jumps[/color][/s][b][color=green]walks[/color][/b] [s][color=red]over[/color][/s][b][color=green]past[/color][/b] the lazy dog.'
     )
     test = Redlines(test_string_1, markdown_style='bbcode')
     assert test.compare(test_string_2) == expected_md
 
     # Test streamlit style
-    expected_md = 'The quick brown fox ~~:red[jumps over ]~~ **:green[walks past ]** the lazy dog.'
+    expected_md = 'The quick brown fox ~~:red[jumps]~~**:green[walks]** ~~:red[over]~~**:green[past]** the lazy dog.'
     test = Redlines(test_string_1, markdown_style='streamlit')
     assert test.compare(test_string_2) == expected_md
 
@@ -272,11 +268,14 @@ Thank you for reaching out. Have a good weekend.
 
 Sophia."""
     expected_md = (
-        'Happy Saturday, \n\nThank you for reaching <del>out, have </del><ins>out. Have </ins>a good '
-        '<del>weekend </del><ins>weekend. </ins>\n\n<del>Sophia</del><ins>Sophia.</ins>'
-    )
-    test = Redlines(test_string_1, markdown_style='none')
-    assert test.compare(test_string_2) == expected_md
+        'Happy Saturday,\n\nThank you for reaching <del>out, have</del><ins>out. Have</ins> a good '
+        '<del>weekend</del><ins>weekend.</ins>\n\n<del>Sophia</del><ins>Sophia.</ins>'
+    ).replace('<del>out, have</del><ins>out. Have</ins>', 'out<del>,</del><ins>.</ins> <del>have</del><ins>Have</ins>') \
+     .replace('<del>weekend</del><ins>weekend.</ins>', 'weekend<ins>.</ins>') \
+     .replace('<del>Sophia</del><ins>Sophia.</ins>', 'Sophia<ins>.</ins>')
+
+    test = Redlines(test_string_1, test_string_2, markdown_style='none')
+    assert test.output_markdown == expected_md
 
 
 def test_different_number_of_paragraphs() -> None:
@@ -296,8 +295,10 @@ Thank you for reaching out. Have a good weekend.
 Sophia."""
 
     expected_md = (
-        'Happy Saturday, \n\nThank you for reaching <del>out, have </del><ins>out. Have </ins>a good <del>weekend '
-        '</del><ins>weekend. </ins>\n\n<del>Best, ¶ Sophia</del><ins>Sophia.</ins>'
+        'Happy Saturday,\n\n'
+        'Thank you for reaching out<del>,</del><ins>.</ins> <del>have</del><ins>Have</ins> a good weekend'
+        '<del>\n\nBest,</del><ins>.</ins>\n\n'
+        'Sophia<ins>.</ins>'
     )
     test = Redlines(test_string_1, test_string_2, markdown_style='none')
     assert test.output_markdown == expected_md

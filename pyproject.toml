@@ -22,19 +22,19 @@ urls = { homepage = "https://houfu.github.io/redlines/", repository = "https://g
 [project.scripts]
 redlines = 'redlines.cli:app'
 
-[dependency-groups]
+[project.optional-dependencies]
 dev = [
     "pdoc>=14.1.0",
     "pytest>=7.4.2",
     "pytest-cov>=3.0.0",
     "pytest-sugar>=0.9.7",
     "tox>=3.28.0",
+    "playwright",
 ]
-
-[project.optional-dependencies]
 api = [
     "fastapi>=0.115.0",
     "pydantic>=2.0.0",
+    "httpx",
 ]
 docx = [
     "python-docx>=1.1.0",

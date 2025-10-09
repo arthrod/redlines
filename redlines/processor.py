@@ -5,231 +5,118 @@ from difflib import SequenceMatcher
 from typing import Any, Optional, Union
 
 from redlines.document import Document
+from .style_parser import StyleParser
 
-tokenizer = re.compile(r'((?:[^()\s]+|[().?!-])\s*)')
-r"""
-This regular expression matches a group of characters that can include any character except for parentheses
-and whitespace characters (which include spaces, tabs, and line breaks) or any character
-that is a parenthesis or punctuation mark (.?!-).
-The group can also include any whitespace characters that follow these characters.
-
-Breaking it down further:
-
-* `(` and `)` indicate a capturing group
-* `(?: )` is a non-capturing group, meaning it matches the pattern but doesn't capture the matched text
-* `[^()\s]+` matches one or more characters that are not parentheses or whitespace characters
-* `|` indicates an alternative pattern
-* `[().?!-]` matches any character that is a parenthesis or punctuation mark `(.?!-)`
-* `\s*` matches zero or more whitespace characters (spaces, tabs, or line breaks) that follow the previous pattern.
-"""
-# This pattern matches one or more newline characters `\n`, and any spaces between them.
-
-paragraph_pattern = re.compile(r'((?:\n *)+)')
-r"""
-It is used to split the text into paragraphs.
-
-* `(?:\\n *)` is a non-capturing group that must start with a `\\n`   and be followed by zero or more spaces.
-* `((?:\\n *)+)` is the previous non-capturing group repeated one or more times.
-"""
+# This tokenizer splits text into words and whitespace sequences.
+tokenizer = re.compile(r'(\s+|\S+)')
 
 space_pattern = re.compile(r'(\s+)')
-"""It is used to detect space."""
 
 
 def tokenize_text(text: str) -> list[str]:
-    return re.findall(tokenizer, text)
-
-
-def split_paragraphs(text: str) -> list[str]:
-    r"""Splits a string into a list of paragraphs. One or more `\n` splits the paragraphs.
-    For example, if the text is "Hello\nWorld\nThis is a test", the result will be:
-    ['Hello', 'World', 'This is a test'].
-
-    :param text: The text to split.
-    :return: a list of paragraphs.
     """
-    split_text = re.split(paragraph_pattern, text)
-    return [s.strip() for s in split_text if s and not re.fullmatch(space_pattern, s)]
+    Splits text into words, punctuation, and whitespace, preserving all three.
+    """
+    # \w+ matches one or more word characters (letters, numbers, underscore)
+    # [^\w\s] matches a single character that is not a word character or whitespace (i.e., punctuation)
+    # \s+ matches one or more whitespace characters
+    return re.findall(r"\w+|[^\w\s]|\s+", text)
 
 
 def concatenate_paragraphs_and_add_chr_182(text: str) -> str:
-    r"""Split paragraphs and concatenate them. Then add a character '¶' between paragraphs.
-    For example, if the text is "Hello\nWorld\nThis is a test", the result will be:
-    "Hello¶World¶This is a test".
-
-    :param text: The text to split.
-    :return: a list of paragraphs.
-    """
-    paragraphs = split_paragraphs(text)
-
-    result = []
-    for p in paragraphs:
-        result.extend((p, ' ¶ '))
-        # Add a string ' ¶ ' between paragraphs.
-    if len(paragraphs) > 0:
-        result.pop()
-
-    return ''.join(result)
-
-
-def split_sentences(text: str) -> list[str]:
-    """
-    Split text into sentences.
-    This uses a regex to split sentences based on punctuation, but tries to avoid splitting on abbreviations.
-    """
-    # Regex to split sentences, handles common abbreviations.
-    sentence_ends = re.compile(r'(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\?|\!)\s')
-    sentences = sentence_ends.split(text)
-    return [s.strip() for s in sentences if s.strip()]
-
+    r"""Replaces paragraph breaks (2+ newlines) with ' ¶ ' and other newlines with a space."""
+    # Replace 2+ newlines (paragraph breaks) with a paragraph marker
+    # The marker is padded with spaces to ensure it's a separate token
+    processed_text = re.sub(r'\n{2,}', ' ¶ ', text)
+    # Replace remaining single newlines with a space
+    processed_text = processed_text.replace('\n', ' ')
+    return processed_text
 
 @dataclass
 class Chunk:
     """A chunk of text that is being compared. In some cases, it may be the whole document."""
-
     text: list[str]
-    """The tokens of the chunk"""
     chunk_location: Optional[str]
-    """An optional string describing the location of the chunk in the document. For example, a PDF page number"""
+    styles: Optional[list[Optional[dict[str, Any]]]] = None
     metadata: Optional[dict[str, Any]] = None
-    """Processor specific metadata (e.g., XPath information)"""
 
     def slice_text(self, start: int, end: int) -> str:
-        """Return the original text represented by tokens within ``[start, end)``."""
         if start >= end:
             return ''
         return ''.join(self.text[start:end])
 
+    def slice_styles(self, start: int, end: int) -> Optional[list[Optional[dict[str, Any]]]]:
+        if self.styles is None or start >= end:
+            return None
+        return self.styles[start:end]
 
 @dataclass
 class Redline:
     """A redline that is generated by the redlines library."""
-
     source_chunk: Chunk
     test_chunk: Chunk
-    """The chunk of text that is being redlined"""
     opcodes: tuple[str, int, int, int, int]
-    """The opcodes that describe the redline in the chunk. See the difflib documentation for more information"""
     metadata: Optional[dict[str, Any]] = None
-    """Additional information describing how the change was produced"""
 
     def to_dict(self, *, include_tokens: bool = False) -> dict[str, Any]:
-        """Return a serializable representation of the redline."""
         tag, i1, i2, j1, j2 = self.opcodes
-        source_segment = {
-            'start': i1,
-            'end': i2,
-            'text': self.source_chunk.slice_text(i1, i2),
-        }
-        test_segment = {
-            'start': j1,
-            'end': j2,
-            'text': self.test_chunk.slice_text(j1, j2),
-        }
+        source_segment = {'start': i1, 'end': i2, 'text': self.source_chunk.slice_text(i1, i2)}
+        test_segment = {'start': j1, 'end': j2, 'text': self.test_chunk.slice_text(j1, j2)}
         if include_tokens:
             source_segment['tokens'] = self.source_chunk.text[i1:i2]
             test_segment['tokens'] = self.test_chunk.text[j1:j2]
-
         if self.source_chunk.metadata:
             source_segment['metadata'] = self.source_chunk.metadata
         if self.test_chunk.metadata:
             test_segment['metadata'] = self.test_chunk.metadata
-
-        payload: dict[str, Any] = {
-            'type': tag,
-            'source': source_segment,
-            'test': test_segment,
-            'metadata': self.metadata or {},
-        }
-        return payload
-
+        return {'type': tag, 'source': source_segment, 'test': test_segment, 'metadata': self.metadata or {}}
 
 class RedlinesProcessor(ABC):
-    """An abstract class that defines the interface for a redlines processor.
-    A redlines processor is a class that takes two documents and generates redlines from them.
-    Use this class as a base class if you want to create a custom redlines processor.
-    See `WholeDocumentProcessor` for an example of a redlines processor.
-    """
-
     @abstractmethod
     def process(self, source: Union[Document, str], test: Union[Document, str]) -> list[Redline]:
         pass
 
-
 class WholeDocumentProcessor(RedlinesProcessor):
-    """A redlines processor that compares two documents. It now compares by sentence first, then by words."""
-
+    """
+    A redlines processor that compares two documents. It is style-aware and
+    compares word by word.
+    """
     def process(self, source: Union[Document, str], test: Union[Document, str]) -> list[Redline]:
-        """Compare two documents by sentences, then by words.
-        :param source: The source document to compare.
-        :param test: The test document to compare.
-        :return: A list of `Redline` that describe the differences between the two documents.
-        """
-        source_text = source.text if isinstance(source, Document) else source
-        test_text = test.text if isinstance(test, Document) else test
+        source_text = (source.text if isinstance(source, Document) else source).strip()
+        test_text = (test.text if isinstance(test, Document) else test).strip()
 
-        # Process paragraphs first, then split into sentences
-        source_processed = concatenate_paragraphs_and_add_chr_182(source_text)
-        test_processed = concatenate_paragraphs_and_add_chr_182(test_text)
-
-        source_sentences = split_sentences(source_processed)
-        test_sentences = split_sentences(test_processed)
-
-        # Fallback to original method if sentence splitting is ineffective
-        if not source_sentences or not test_sentences:
-            return self._process_whole_document(source_processed, test_processed)
-
-        sentence_matcher = SequenceMatcher(None, source_sentences, test_sentences)
-        redlines = []
-
-        for tag, i1, i2, j1, j2 in sentence_matcher.get_opcodes():
-            source_segment_sentences = source_sentences[i1:i2]
-            test_segment_sentences = test_sentences[j1:j2]
-
-            source_segment_text = " ".join(source_segment_sentences)
-            test_segment_text = " ".join(test_segment_sentences)
-
-            # For all cases, we tokenize the segments and generate redlines.
-            # For 'equal' tags, the word-level diff will just produce one big 'equal' opcode.
-            # This simplifies logic and avoids separate handling.
-
-            source_tokens = tokenize_text(source_segment_text)
-            test_tokens = tokenize_text(test_segment_text)
-
-            # Skip empty segments
-            if not source_tokens and not test_tokens:
-                continue
-
-            seq_source_normalized = [token.strip() for token in source_tokens]
-            seq_test_normalized = [token.strip() for token in test_tokens]
-
-            word_matcher = SequenceMatcher(None, seq_source_normalized, seq_test_normalized, autojunk=False)
-
-            for opcode in word_matcher.get_opcodes():
-                redlines.append(
-                    Redline(
-                        source_chunk=Chunk(text=source_tokens, chunk_location=None),
-                        test_chunk=Chunk(text=test_tokens, chunk_location=None),
-                        opcodes=opcode,
-                    )
-                )
-        return redlines
-
-    def _process_whole_document(self, source_text: str, test_text: str) -> list[Redline]:
-        """Original method to compare entire documents as a single chunk."""
-        source_tokens = tokenize_text(source_text)
-        test_tokens = tokenize_text(test_text)
+        source_tokens, source_styles = self._get_tokens_and_styles(source_text)
+        test_tokens, test_styles = self._get_tokens_and_styles(test_text)
 
         seq_source_normalized = [token.strip() for token in source_tokens]
         seq_test_normalized = [token.strip() for token in test_tokens]
 
-        matcher = SequenceMatcher(None, seq_source_normalized, seq_test_normalized)
+        matcher = SequenceMatcher(None, seq_source_normalized, seq_test_normalized, autojunk=False)
 
         return [
             Redline(
-                source_chunk=Chunk(text=source_tokens, chunk_location=None),
-                test_chunk=Chunk(text=test_tokens, chunk_location=None),
+                source_chunk=Chunk(text=source_tokens, chunk_location=None, styles=source_styles),
+                test_chunk=Chunk(text=test_tokens, chunk_location=None, styles=test_styles),
                 opcodes=opcode,
             )
             for opcode in matcher.get_opcodes()
         ]
+
+    def _get_tokens_and_styles(self, text: str) -> tuple[list[str], Optional[list[Optional[dict[str, Any]]]]]:
+        """
+        Tokenizes text and extracts styles. It handles both plain text and HTML-like content.
+        """
+        text_with_para_markers = concatenate_paragraphs_and_add_chr_182(text)
+
+        if '<' in text_with_para_markers and '>' in text_with_para_markers:
+            parser = StyleParser()
+            segments = parser.parse(text_with_para_markers)
+            tokens, styles = [], []
+            for seg_text, style in segments:
+                seg_tokens = tokenize_text(seg_text)
+                tokens.extend(seg_tokens)
+                styles.extend([style] * len(seg_tokens))
+            return tokens, styles
+        else:
+            tokens = tokenize_text(text_with_para_markers)
+            return tokens, None

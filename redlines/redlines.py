@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Optional, Tuple
 
@@ -194,148 +195,113 @@ class Redlines:
             return manager.extract_text(data, source_format)
         return manager.extract_text_sync(data, source_format)
 
+    def _apply_markdown_styles(self, text: str, style: dict[str, Any]) -> str:
+        if not style:
+            return text
+
+        if style.get('font-weight') == 'bold':
+            text = f'**{text}**'
+        if style.get('font-style') == 'italic':
+            text = f'*{text}*'
+        if style.get('text-decoration') == 'underline':
+            # Markdown doesn't have a standard underline syntax, so we use HTML `<u>` tag.
+            text = f'<u>{text}</u>'
+
+        return text
+
+    def _render_content(
+        self,
+        tokens: list[str],
+        styles: Optional[list[Optional[dict[str, Any]]]],
+        is_html_style: bool,
+        wrapper: tuple[str, str] = ('', ''),
+    ) -> str:
+        if not tokens:
+            return ''
+
+        content = ""
+        if styles:
+            for token, style in zip(tokens, styles):
+                if is_html_style:
+                    safe_token = token.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                    if style:
+                        style_str = '; '.join(f'{k}: {v}' for k, v in style.items())
+                        content += f'<span style="{style_str}">{safe_token}</span>'
+                    else:
+                        content += safe_token
+                else:
+                    if style:
+                        content += self._apply_markdown_styles(token, style)
+                    else:
+                        content += token
+        else:
+            content = "".join(tokens)
+
+        if not content:
+            return ''
+
+        return f'{wrapper[0]}{content}{wrapper[1]}'
+
     @property
     def output_markdown(self) -> str:
-        """Returns the delta in Markdown format.
-
-        ## Styling Markdown
-        To output markdown in a particular manner, you must pass a `markdown_style` option when the `Redlines` object
-        is created or when `Redlines.compare` is called.
-
-        ```python
-        from redlines import Redlines
-
-        test = Redlines(
-            'The quick brown fox jumps over the lazy dog.',
-            'The quick brown fox walks past the lazy dog.',
-            markdown_style='red',  # This option specifies the style as red
-        )
-
-        test.compare(markdown_style='none')  # This option specifies the style as none
-        ```
-
-        ### Available styles
-
-        | Style | Preview |
-        |-------| -------|
-        |ghfm (GitHub Flavored Markdown) (**default**)| 'The quick brown fox ~~jumps over ~~**walks past **the lazy dog.' |
-        |red-green| "The quick brown fox <span style='color:red;font-weight:700;text-decoration:line-through;'>jumps over </span><span style='color:green;font-weight:700;'>walks past </span>the lazy dog."|
-        |none | 'The quick brown fox <del>jumps over </del><ins>walks past </ins>the lazy dog.'|
-        |red | "The quick brown fox <span style='color:red;font-weight:700;text-decoration:line-through;'>jumps over </span><span style='color:red;font-weight:700;'>walks past </span>the lazy dog."|
-        |bbcode (BBCode) | 'The quick brown fox [s][color=red]jumps over [/color][/s][b][color=green]walks past [/color][/b]the lazy dog.' |
-        |streamlit | 'The quick brown fox ~~:red[jumps over ]~~ **:green[walks past ]** the lazy dog.' |
-
-        ### Custom styling
-
-        You can also use css classes to provide custom styling by setting `markdown_style` as "custom_css".
-        Insertions and deletions are now styled using the "redline-inserted" and "redline-deleted" CSS classes.
-        You can also set your own CSS classes by specifying the name of the CSS class in the options `ins_class`
-        and `del_class` respectively in the constructor or compare function.
-
-        ## Markdown output in specific environments
-
-        Users have reported that the output doesn't display correctly in their environments.
-        This is because styling may not appear in markdown environments which disallow HTML.
-        There is no consistent support for strikethroughs and colors in the markdown standard,
-        and styling is largely accomplished through raw HTML. If you are using GitHub or Streamlit, you may not get
-        the formatting you expect or see any change at all.
-
-        If you are facing this kind of difficulty, here are some recommendations. If your experience doesn't match
-        the hints or description below, or you continue to face problems, please raise an issue.
-
-        ### Jupyter Notebooks
-        This library was first written for the Jupyter notebook environment, so all the available styles, including
-        `red-green`, `red` and `none` work. `ghfm` is the default, but may not render with colors.
-
-        ### Streamlit
-
-        Try this:
-
-        * If streamlit version is >= 1.16.0, consider the markdown style "streamlit"
-        * If streamlit version is < 1.16.0, consider the markdown style `ghfm`
-        * Enable parsing of HTML. In Streamlit, you need to set the `unsafe_allow_html` argument in `st.write` or
-        `st.markdown` to `True`.
-
-        ### Colab
-
-        Try this:
-        * Use the markdown style `none` or `ghfm`
-        * `Redlines.output_rich` has been reported to work in Colab
-
-        """
         result = []
-
         style = self.options.get('markdown_style', 'ghfm')
+        is_html_style = style not in ['ghfm', 'bbcode', 'streamlit', 'none']
 
+        md_styles = {}
         if style == 'none' or style is None:
             md_styles = {'ins': ('<ins>', '</ins>'), 'del': ('<del>', '</del>')}
         elif style in ('red-green', 'red_green'):
-            md_styles = {
-                'ins': ("<span style='color:green;font-weight:700;'>", '</span>'),
-                'del': ("<span style='color:red;font-weight:700;text-decoration:line-through;'>", '</span>'),
-            }
+            md_styles = {'ins': ('**', '**'), 'del': ('~~', '~~')}
         elif style == 'red':
-            md_styles = {
-                'ins': ("<span style='color:red;font-weight:700;'>", '</span>'),
-                'del': ("<span style='color:red;font-weight:700;text-decoration:line-through;'>", '</span>'),
-            }
+            md_styles = {'ins': ('**', '**'), 'del': ('~~', '~~')}
         elif style in {'red-blue', 'red_blue'}:
-            md_styles = {
-                'ins': ("<span style='color:blue;font-weight:700;'>", '</span>'),
-                'del': ("<span style='color:red;font-weight:700;text-decoration:line-through;'>", '</span>'),
-            }
+            md_styles = {'ins': ('**', '**'), 'del': ('~~', '~~')}
         elif style == 'custom_css':
             ins_class = self.options.get('ins_class', 'redline-inserted')
             del_class = self.options.get('del_class', 'redline-deleted')
-
-            elem_attributes = {'ins': f"class='{ins_class}'", 'del': f"class='{del_class}'"}
-
             md_styles = {
-                'ins': (f'<span {elem_attributes["ins"]}>', '</span>'),
-                'del': (f'<span {elem_attributes["del"]}>', '</span>'),
+                'ins': (f'<span class="{ins_class}">', '</span>'),
+                'del': (f'<span class="{del_class}">', '</span>'),
             }
         elif style == 'ghfm':
             md_styles = {'ins': ('**', '**'), 'del': ('~~', '~~')}
         elif style == 'bbcode':
             md_styles = {'ins': ('[b][color=green]', '[/color][/b]'), 'del': ('[s][color=red]', '[/color][/s]')}
         elif style == 'streamlit':
-            md_styles = {'ins': ('**:green[', ']** '), 'del': ('~~:red[', ']~~ ')}
-        else:
-            # Fallback to ghfm for unknown styles
-            md_styles = {'ins': ('**', '**'), 'del': ('~~', '~~')}
+            md_styles = {'ins': ('**:green[', ']**'), 'del': ('~~:red[', ']~~')}
 
         for redline in self.redlines:
             tag, i1, i2, j1, j2 = redline.opcodes
-            source_tokens = redline.source_chunk.text
-            test_tokens = redline.test_chunk.text
+            source_chunk = redline.source_chunk
+            test_chunk = redline.test_chunk
 
             if tag == 'equal':
-                temp_str = ''.join(source_tokens[i1:i2])
-                temp_str = temp_str.replace('¶ ', '\n\n')
-                # here we use '¶ ' instead of ' ¶ ', because the leading space will be included in the previous token,
-                # according to tokenizer = re.compile(r"((?:[^()\s]+|[().?!-])\s*)")
-                result.append(temp_str)
+                tokens = source_chunk.text[i1:i2]
+                styles = source_chunk.slice_styles(i1, i2)
+                result.append(self._render_content(tokens, styles, is_html_style))
             elif tag == 'insert':
-                temp_str = ''.join(test_tokens[j1:j2])
-                splits = temp_str.split('¶ ')
-                for split in splits:
-                    result.extend((f'{md_styles["ins"][0]}{split}{md_styles["ins"][1]}', '\n\n'))
-                if len(splits) > 0:
-                    result.pop()
+                tokens = test_chunk.text[j1:j2]
+                styles = test_chunk.slice_styles(j1, j2)
+                result.append(self._render_content(tokens, styles, is_html_style, md_styles.get('ins', ('', ''))))
             elif tag == 'delete':
-                result.append(f'{md_styles["del"][0]}{"".join(source_tokens[i1:i2])}{md_styles["del"][1]}')
-                # for 'delete', we make no change, because otherwise there will be two times '\n\n' than the original
-                # text.
+                tokens = source_chunk.text[i1:i2]
+                styles = source_chunk.slice_styles(i1, i2)
+                result.append(self._render_content(tokens, styles, is_html_style, md_styles.get('del', ('', ''))))
             elif tag == 'replace':
-                result.append(f'{md_styles["del"][0]}{"".join(source_tokens[i1:i2])}{md_styles["del"][1]}')
-                temp_str = ''.join(test_tokens[j1:j2])
-                splits = temp_str.split('¶ ')
-                for split in splits:
-                    result.extend((f'{md_styles["ins"][0]}{split}{md_styles["ins"][1]}', '\n\n'))
-                if len(splits) > 0:
-                    result.pop()
+                del_tokens = source_chunk.text[i1:i2]
+                del_styles = source_chunk.slice_styles(i1, i2)
+                result.append(self._render_content(del_tokens, del_styles, is_html_style, md_styles.get('del', ('', ''))))
 
-        return ''.join(result)
+                ins_tokens = test_chunk.text[j1:j2]
+                ins_styles = test_chunk.slice_styles(j1, j2)
+                result.append(self._render_content(ins_tokens, ins_styles, is_html_style, md_styles.get('ins', ('', ''))))
+
+        raw_output = ''.join(result)
+        # Regex to find the paragraph marker with optional surrounding whitespace
+        # and replace it with two newlines.
+        output = re.sub(r'\s*¶\s*', '\n\n', raw_output)
+        return output.strip()
 
     # ------------------------------------------------------------------
     # Internal helpers
