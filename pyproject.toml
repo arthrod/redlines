@@ -1,32 +1,91 @@
 [project]
 name = "redlines"
-version = "0.5.2"
+version = "0.6.2"
 description = "Compare text, and produce human-readable differences or deltas which look like track changes in Microsoft Word."
 readme = "README.md"
 authors = [
     { name = "houfu", email = "houfu@outlook.sg" }
 ]
-license = { text = "MIT" }
-requires-python = ">=3.8"
+license = "MIT"
+license-files = ["LICENSE.txt"]
+requires-python = ">=3.10"
+keywords = ["diff", "text-comparison", "track-changes", "redlines", "document-comparison", "cli"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
+
 dependencies = [
     "click>=8.1.7",
+    "click-default-group>=1.2.4",
     "rich-click>=1.6.1",
     "rich>=13.3.5",
+    "PyYAML>=6.0.1",
+    "typing-extensions>=4.1; python_version < '3.11'",
 ]
-urls = { homepage = "https://houfu.github.io/redlines/", repository = "https://github.com/houfu/redlines" }
+
+[project.urls]
+Homepage = "https://houfu.github.io/redlines/"
+Documentation = "https://houfu.github.io/redlines/"
+Repository = "https://github.com/houfu/redlines"
+"Agent Guide" = "https://houfu.github.io/redlines/guides/agent-guide/"
+
+[project.optional-dependencies]
+nupunkt = [
+    "nupunkt>=0.6.0; python_version>='3.11'",
+]
+levenshtein = ["Levenshtein>=0.27.1"]
+pdf = ["pdfplumber>=0.10.0"]
 
 [project.scripts]
 redlines = 'redlines.cli:cli'
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
+    "mypy>=1.14.1",
     "pdoc>=14.1.0",
     "pytest>=7.4.2",
     "pytest-cov>=3.0.0",
     "pytest-sugar>=0.9.7",
-    "tox>=3.28.0",
+    "types-PyYAML>=6.0.12",
 ]
 
 [build-system]
 requires = ["hatchling>=1.18.0"]
 build-backend = "hatchling.build"
+
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+disable_error_code = ["misc", "unused-ignore"]
+
+ignore_missing_imports = false
+follow_untyped_imports = true
+
+implicit_optional = true
+strict_optional = true
+
+show_error_context = true
+show_error_code_links = true
+pretty = true
+
+[[tool.mypy.overrides]]
+module = "nupunkt"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "Levenshtein"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "click_default_group"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "pdfplumber"
+ignore_missing_imports = true

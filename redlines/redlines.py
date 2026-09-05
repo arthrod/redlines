@@ -1,62 +1,230 @@
 from __future__ import annotations
 
 import re
+import sys
+import typing as t
 
 from rich.text import Text
 
-from redlines.document import Document
-from redlines.processor import WholeDocumentProcessor, Redline
+if sys.version_info >= (3, 11):
+    from typing import Unpack
+else:
+    from typing_extensions import Unpack
+
+from .document import Document
+from .enums import MarkdownStyle, OutputType
+from .processor import (
+    SENTENCE_MARKER,
+    DiffOperation,
+    Redline,
+    RedlinesProcessor,
+    Stats,
+    WholeDocumentProcessor,
+)
+
+__all__: tuple[str, ...] = (
+    "Redlines",
+    "RedlinesOptions",
+)
+
+# Workaround for enum + literal support in type hints
+# See: https://github.com/python/typing/issues/781
+OutputTypeLike = OutputType | t.Literal["markdown", "rich"]
+
+
+def trailing_whitespace(token: str) -> str:
+    """
+    Return the whitespace a token carries at its end, which may be an empty string.
+
+    :param token: The token to inspect.
+    :return: The trailing whitespace of the token.
+    :rtype: str
+    """
+    return token[len(token.rstrip()) :]
+
+
+def _strip_sentence_markers(text: str) -> str:
+    """
+    Remove the sentence boundary markers ('¦ ') emitted by sentence-level tokenization.
+
+    Unlike the paragraph marker '¶', which renders as a real paragraph break ('\\n\\n'),
+    the sentence marker corresponds to nothing in the input text and must never appear
+    in any output (see `redlines.processor.SENTENCE_MARKER`).
+
+    :param text: The text to clean.
+    :return: The text with sentence markers removed.
+    :rtype: str
+    """
+    return text.replace(f"{SENTENCE_MARKER} ", "")
+
+
+def join_equal_tokens(
+    source_tokens: list[str],
+    test_tokens: list[str],
+    i1: int,
+    i2: int,
+    j1: int,
+    j2: int,
+) -> str:
+    """
+    Join the tokens of an `equal` operation, preserving whitespace from either document.
+
+    Tokens carry their own trailing whitespace, but the processor compares tokens with that
+    whitespace stripped, so `token` in the source and `token ` in the test are treated as equal.
+    Rendering the source token alone would then drop a space the test document has, jamming the
+    unchanged text against the change that follows it (see issue #87).
+
+    Whenever the source token has no trailing whitespace but its test counterpart does, the test
+    token's whitespace is used. The tokens are otherwise identical apart from that whitespace.
+
+    :param source_tokens: The tokens of the source document.
+    :param test_tokens: The tokens of the test document.
+    :param i1: The start of the operation in the source tokens.
+    :param i2: The end of the operation in the source tokens.
+    :param j1: The start of the operation in the test tokens.
+    :param j2: The end of the operation in the test tokens.
+    :return: The text of the unchanged run.
+    :rtype: str
+    """
+    result: list[str] = []
+    for offset, source_token in enumerate(source_tokens[i1:i2]):
+        if not trailing_whitespace(source_token) and j1 + offset < j2:
+            source_token += trailing_whitespace(test_tokens[j1 + offset])
+        result.append(source_token)
+
+    return "".join(result)
+
+
+class RedlinesOptions(t.TypedDict, total=False):
+    markdown_style: str | MarkdownStyle | None
+    """The style to use for markdown output. See `Redlines.output_markdown` for more information."""
+    ins_class: str
+    """The CSS class to use for insertions when `markdown_style` is set to `custom_css`. Defaults to 'redline-inserted'."""
+    del_class: str
+    """The CSS class to use for deletions when `markdown_style` is set to `custom_css`. Defaults to 'redline-deleted'."""
 
 
 class Redlines:
-    _source: str = None
-    _test: str = None
-    _seq1: list[str] = None
-    _seq2: list[str] = None
+    _source: str | None = None
+    _test: str | None = None
+    _seq1: list[str] | None = None
+    _seq2: list[str] | None = None
+    _diff_operations: list[DiffOperation] | None = None
 
     @property
     def source(self) -> str:
         """
+        Get the source text to be used as a basis for comparison.
+
         :return: The source text to be used as a basis for comparison.
+        :rtype: str
         """
+        if self._source is None:
+            raise ValueError(
+                "No source text available in Redlines object.\n"
+                "\n"
+                "Cause: The source property was accessed before being set.\n"
+                "\n"
+                "To fix: Initialize Redlines with source text or set it explicitly:\n"
+                "  # Option 1: Initialize with both texts\n"
+                "  redlines_obj = Redlines(source='original', test='modified')\n"
+                "\n"
+                "  # Option 2: Set source property after creation\n"
+                "  redlines_obj = Redlines()\n"
+                "  redlines_obj.source = 'original'\n"
+                "  redlines_obj.test = 'modified'\n"
+            )
         return self._source
 
     @source.setter
-    def source(self, value):
+    def source(self, value: str | Document) -> None:
         self._source = value.text if isinstance(value, Document) else value
 
         # If test is already set, process the new source against it
         if self._test is not None:
-            self._redlines = self.processor.process(self._source, self._test)
+            self._diff_operations = self.processor.process(self._source, self._test)
 
     @property
-    def test(self):
-        """:return: The text to be compared with the source."""
+    def test(self) -> str:
+        """
+        Get the text to be compared with the source.
+
+        :return: The text to be compared with the source.
+        :rtype: str
+        """
+        if self._test is None:
+            raise ValueError(
+                "No test text available in Redlines object.\n"
+                "\n"
+                "Cause: The test property was accessed before being set.\n"
+                "\n"
+                "To fix: Initialize Redlines with test text or set it explicitly:\n"
+                "  # Option 1: Initialize with both texts\n"
+                "  redlines_obj = Redlines(source='original', test='modified')\n"
+                "\n"
+                "  # Option 2: Set test property after creation\n"
+                "  redlines_obj = Redlines()\n"
+                "  redlines_obj.source = 'original'\n"
+                "  redlines_obj.test = 'modified'\n"
+            )
         return self._test
 
     @test.setter
-    def test(self, value):
+    def test(self, value: str | Document) -> None:
         self._test = value.text if isinstance(value, Document) else value
 
         # Process the text against the source
-        if self._source is not None and self._test is not None:
-            self._redlines = self.processor.process(self._source, self._test)
+        if self._source is not None:
+            self._diff_operations = self.processor.process(self._source, self._test)
+
+    @property
+    def _diff_ops(self) -> list[DiffOperation]:
+        """
+        Internal property: Return the list of DiffOperation objects (includes 'equal' operations).
+        For internal rendering code.
+
+        :return: List of DiffOperation objects
+        """
+        if self._diff_operations is None:
+            raise ValueError(
+                "No diff operations available in Redlines object.\n"
+                "\n"
+                "Cause: The diff operations were accessed before a comparison was made.\n"
+                "\n"
+                "To fix: Set both source and test texts to generate diff operations:\n"
+                "  # Option 1: Initialize with both texts\n"
+                "  redlines_obj = Redlines(source='original', test='modified')\n"
+                "\n"
+                "  # Option 2: Set properties after creation\n"
+                "  redlines_obj = Redlines()\n"
+                "  redlines_obj.source = 'original'\n"
+                "  redlines_obj.test = 'modified'\n"
+                "\n"
+                "  # Option 3: Use compare method\n"
+                "  redlines_obj = Redlines('original')\n"
+                "  redlines_obj.compare('modified')\n"
+            )
+        return self._diff_operations
 
     @property
     def redlines(self) -> list[Redline]:
         """
-        Return the list of Redline objects representing the changes from source to test.
+        Return the list of Redline objects representing actual changes between source and test.
+
+        This is an alias for the `changes` property and provides the same functionality.
+        Only actual changes are returned (equal operations are excluded).
 
         :return: List of Redline objects
+        :rtype: list[Redline]
         """
-        if self._redlines is None:
-            raise ValueError(
-                "No test string was provided when the function was called, or during initialisation."
-            )
-        return self._redlines
+        return self.changes
 
     def __init__(
-        self, source: str | Document, test: str | Document | None = None, **options
+        self,
+        source: str | Document,
+        test: str | Document | None = None,
+        processor: RedlinesProcessor | None = None,
+        **options: Unpack[RedlinesOptions],
     ):
         """
         Redline is a class used to compare text, and producing human-readable differences or deltas
@@ -92,14 +260,40 @@ class Redlines:
 
         ```
 
+        For advanced use cases, you can specify a custom processor for different tokenization strategies:
+
+        ```python
+        from redlines import Redlines
+        from redlines.processor import NupunktProcessor
+
+        # Use sentence-level tokenization (requires nupunkt, Python 3.11+)
+        processor = NupunktProcessor()
+        test = Redlines(
+            "Dr. Smith said hello. Mr. Jones replied.",
+            "Dr. Smith said hi. Mr. Jones replied.",
+            processor=processor
+        )
+        ```
+
+        Processors also accept an ``autojunk`` keyword (default False) which is passed to
+        difflib.SequenceMatcher, e.g. ``WholeDocumentProcessor(autojunk=True)`` — see ADR-0010.
+
         :param source: The source text to be used as a basis for comparison.
+        :type source: str | Document
         :param test: Optional test text to compare with the source.
+        :type test: str | Document | None
+        :param processor: Optional custom processor for tokenization. Defaults to WholeDocumentProcessor (paragraph-level).
+        :type processor: RedlinesProcessor | None
+        :param options: Additional options for comparison and output formatting.
+        :type options: RedlinesOptions
         """
-        self.processor = WholeDocumentProcessor()
+        self.processor = (
+            processor if processor is not None else WholeDocumentProcessor()
+        )
         self.source = source.text if isinstance(source, Document) else source
         self.options = options
-        self._redlines = None
-        if test:
+        self._diff_operations = None
+        if test is not None:
             self.test = test.text if isinstance(test, Document) else test
             # self.compare()
 
@@ -116,8 +310,254 @@ class Redlines:
         ... s.opcodes
         [('equal', 0, 4, 0, 4), ('replace', 4, 6, 4, 6), ('equal', 6, 9, 6, 9)]
         ```
+
+        :return: List of 5-tuples describing how to turn `source` into `test`.
+        :rtype: list[tuple[str, int, int, int, int]]
         """
-        return [redline.opcodes for redline in self.redlines]
+        return [diff_op.opcodes for diff_op in self._diff_ops]
+
+    @property
+    def changes(self) -> list[Redline]:
+        """
+        Return list of Redline objects representing the differences between source and test.
+
+        This provides a user-friendly interface for programmatically accessing changes,
+        with direct access to the changed text and position information. Only actual
+        changes are returned (equal operations are excluded).
+
+        ```python
+        from redlines import Redlines
+
+        test = Redlines(
+            "The quick brown fox jumps over the lazy dog.",
+            "The quick brown fox walks past the lazy dog."
+        )
+
+        for redline in test.changes:
+            print(f"{redline.operation}: {redline.source_text} -> {redline.test_text}")
+        # Output: replace: jumps over  -> walks past
+        ```
+
+        :return: List of Redline objects (only actual changes, no 'equal' operations)
+        """
+        result = []
+        for diff_op in self._diff_ops:
+            tag, i1, i2, j1, j2 = diff_op.opcodes
+
+            # Skip equal operations - only return actual changes
+            if tag == "equal":
+                continue
+
+            source_tokens = diff_op.source_chunk.text
+            test_tokens = diff_op.test_chunk.text
+
+            # Extract text and positions based on operation type
+            # Sentence markers ('¦') are internal anchors with no counterpart in the
+            # input text, so they must not leak into the public Redline API.
+            if tag == "delete":
+                redline = Redline(
+                    operation="delete",
+                    source_text=_strip_sentence_markers("".join(source_tokens[i1:i2])),
+                    test_text=None,
+                    source_position=(i1, i2),
+                    test_position=None,
+                )
+            elif tag == "insert":
+                redline = Redline(
+                    operation="insert",
+                    source_text=None,
+                    test_text=_strip_sentence_markers("".join(test_tokens[j1:j2])),
+                    source_position=None,
+                    test_position=(j1, j2),
+                )
+            elif tag == "replace":
+                redline = Redline(
+                    operation="replace",
+                    source_text=_strip_sentence_markers("".join(source_tokens[i1:i2])),
+                    test_text=_strip_sentence_markers("".join(test_tokens[j1:j2])),
+                    source_position=(i1, i2),
+                    test_position=(j1, j2),
+                )
+            else:
+                continue
+
+            result.append(redline)
+
+        return result
+
+    def get_changes(self, operation: str | None = None) -> list[Redline]:
+        """
+        Get changes (redlines), optionally filtered by operation type.
+
+        ```python
+        from redlines import Redlines
+
+        test = Redlines(
+            "The quick brown fox jumps over the lazy dog.",
+            "The quick brown fox walks past the lazy dog."
+        )
+
+        # Get all changes
+        all_changes = test.get_changes()
+
+        # Get only replacements
+        replacements = test.get_changes(operation="replace")
+
+        # Get deletions
+        deletions = test.get_changes(operation="delete")
+
+        # Get insertions
+        insertions = test.get_changes(operation="insert")
+        ```
+
+        :param operation: Filter by operation type: "delete", "insert", or "replace". If None, returns all changes.
+        :return: List of Redline objects matching the filter
+        """
+        changes = self.changes
+
+        if operation is None:
+            return changes
+
+        if operation not in ("delete", "insert", "replace"):
+            raise ValueError(
+                f"Invalid operation type: '{operation}'.\n"
+                "\n"
+                f"Cause: The operation parameter must be one of the three valid diff operation types, but '{operation}' was provided.\n"
+                "\n"
+                "To fix: Use one of the valid operation types:\n"
+                "  # Get deletions (text removed from source)\n"
+                "  deletions = redlines_obj.get_changes(operation='delete')\n"
+                "\n"
+                "  # Get insertions (text added in test)\n"
+                "  insertions = redlines_obj.get_changes(operation='insert')\n"
+                "\n"
+                "  # Get replacements (text changed)\n"
+                "  replacements = redlines_obj.get_changes(operation='replace')\n"
+                "\n"
+                "  # Get all changes (no filter)\n"
+                "  all_changes = redlines_obj.get_changes()\n"
+            )
+
+        return [r for r in changes if r.operation == operation]
+
+    def stats(self) -> Stats:
+        """
+        Get comprehensive statistics about the changes between source and test.
+
+        Returns detailed analytics including:
+        - Operation counts (deletions, insertions, replacements)
+        - Change size metrics (longest, shortest, average lengths)
+        - Change ratio (percentage of text modified)
+        - Character-level statistics (added, deleted, net change)
+        - Levenshtein distance (if python-Levenshtein available)
+
+        ```python
+        from redlines import Redlines
+
+        test = Redlines(
+            "The quick brown fox jumps over the lazy dog.",
+            "The quick brown fox walks past the lazy dog."
+        )
+
+        stats = test.stats()
+        print(f"Total changes: {stats.total_changes}")
+        print(f"Deletions: {stats.deletions}")
+        print(f"Insertions: {stats.insertions}")
+        print(f"Replacements: {stats.replacements}")
+        print(f"Change ratio: {stats.change_ratio:.1%}")
+        print(f"Longest change: {stats.longest_change_length} chars")
+        print(f"Levenshtein distance: {stats.levenshtein_distance}")
+        ```
+
+        :return: Stats object with comprehensive change statistics
+        """
+        # Handle case where source and test are identical (including empty strings)
+        if self._test is not None and self.source == self._test:
+            levenshtein_distance: int | None = 0
+            try:
+                import Levenshtein
+
+                levenshtein_distance = Levenshtein.distance(self.source, self.test)
+            except ImportError:
+                levenshtein_distance = None
+
+            return Stats(
+                total_changes=0,
+                deletions=0,
+                insertions=0,
+                replacements=0,
+                longest_change_length=0,
+                shortest_change_length=0,
+                average_change_length=0.0,
+                change_ratio=0.0,
+                chars_added=0,
+                chars_deleted=0,
+                chars_net_change=0,
+                levenshtein_distance=levenshtein_distance,
+            )
+
+        changes = self.changes
+
+        # Basic operation counts
+        deletions = sum(1 for c in changes if c.operation == "delete")
+        insertions = sum(1 for c in changes if c.operation == "insert")
+        replacements = sum(1 for c in changes if c.operation == "replace")
+
+        # Change length calculations
+        change_lengths = []
+        for change in changes:
+            text = change.source_text or change.test_text or ""
+            change_lengths.append(len(text))
+
+        longest_change_length = max(change_lengths) if change_lengths else 0
+        shortest_change_length = min(change_lengths) if change_lengths else 0
+        average_change_length = (
+            sum(change_lengths) / len(change_lengths) if change_lengths else 0.0
+        )
+
+        # Change ratio calculation
+        total_chars = max(len(self.source), len(self.test))
+        changed_chars = sum(
+            len(change.source_text or change.test_text or "") for change in changes
+        )
+        change_ratio = changed_chars / total_chars if total_chars > 0 else 0.0
+
+        # Character-level statistics
+        chars_added = sum(
+            len(change.test_text) if change.test_text is not None else 0
+            for change in changes
+            if change.operation in ["insert", "replace"]
+        )
+        chars_deleted = sum(
+            len(change.source_text) if change.source_text is not None else 0
+            for change in changes
+            if change.operation in ["delete", "replace"]
+        )
+        chars_net_change = chars_added - chars_deleted
+
+        # Levenshtein distance (optional)
+        levenshtein_distance = None
+        try:
+            import Levenshtein
+
+            levenshtein_distance = Levenshtein.distance(self.source, self.test)
+        except ImportError:
+            pass
+
+        return Stats(
+            total_changes=len(changes),
+            deletions=deletions,
+            insertions=insertions,
+            replacements=replacements,
+            longest_change_length=longest_change_length,
+            shortest_change_length=shortest_change_length,
+            average_change_length=average_change_length,
+            change_ratio=change_ratio,
+            chars_added=chars_added,
+            chars_deleted=chars_deleted,
+            chars_net_change=chars_net_change,
+            levenshtein_distance=levenshtein_distance,
+        )
 
     @property
     def output_markdown(self) -> str:
@@ -188,8 +628,10 @@ class Redlines:
         * Use the markdown style `none` or `ghfm`
         * `Redlines.output_rich` has been reported to work in Colab
 
+        :return: The delta in Markdown format.
+        :rtype: str
         """
-        result = []
+        result: list[str] = []
 
         # default_style = "red_green"
 
@@ -257,19 +699,19 @@ class Redlines:
             elif style == "streamlit":
                 md_styles = {"ins": ("**:green[", "]** "), "del": ("~~:red[", "]~~ ")}
 
-        for redline in self.redlines:
-            tag, i1, i2, j1, j2 = redline.opcodes
-            source_tokens = redline.source_chunk.text
-            test_tokens = redline.test_chunk.text
+        for diff_op in self._diff_ops:
+            tag, i1, i2, j1, j2 = diff_op.opcodes
+            source_tokens = diff_op.source_chunk.text
+            test_tokens = diff_op.test_chunk.text
 
             if tag == "equal":
-                temp_str = "".join(source_tokens[i1:i2])
+                temp_str = join_equal_tokens(source_tokens, test_tokens, i1, i2, j1, j2)
                 temp_str = re.sub("¶ ", "\n\n", temp_str)
                 # here we use '¶ ' instead of ' ¶ ', because the leading space will be included in the previous token,
                 # according to tokenizer = re.compile(r"((?:[^()\s]+|[().?!-])\s*)")
-                result.append(temp_str)
+                result.append(_strip_sentence_markers(temp_str))
             elif tag == "insert":
-                temp_str = "".join(test_tokens[j1:j2])
+                temp_str = _strip_sentence_markers("".join(test_tokens[j1:j2]))
                 splits = re.split("¶ ", temp_str)
                 for split in splits:
                     result.append(f"{md_styles['ins'][0]}{split}{md_styles['ins'][1]}")
@@ -278,15 +720,15 @@ class Redlines:
                     result.pop()
             elif tag == "delete":
                 result.append(
-                    f"{md_styles['del'][0]}{''.join(source_tokens[i1:i2])}{md_styles['del'][1]}"
+                    f"{md_styles['del'][0]}{_strip_sentence_markers(''.join(source_tokens[i1:i2]))}{md_styles['del'][1]}"
                 )
                 # for 'delete', we make no change, because otherwise there will be two times '\n\n' than the original
                 # text.
             elif tag == "replace":
                 result.append(
-                    f"{md_styles['del'][0]}{''.join(source_tokens[i1:i2])}{md_styles['del'][1]}"
+                    f"{md_styles['del'][0]}{_strip_sentence_markers(''.join(source_tokens[i1:i2]))}{md_styles['del'][1]}"
                 )
-                temp_str = "".join(test_tokens[j1:j2])
+                temp_str = _strip_sentence_markers("".join(test_tokens[j1:j2]))
                 splits = re.split("¶ ", temp_str)
                 for split in splits:
                     result.append(f"{md_styles['ins'][0]}{split}{md_styles['ins'][1]}")
@@ -298,41 +740,250 @@ class Redlines:
 
     @property
     def output_rich(self) -> Text:
-        """Returns the delta in text with colors/style for the console."""
+        """
+        Returns the delta in text with colors/style for the console.
+
+        :return: The delta in text with colors/style for the console.
+        :rtype: Text
+        """
         console_text = Text()
 
-        for redline in self.redlines:
-            tag, i1, i2, j1, j2 = redline.opcodes
-            source_tokens = redline.source_chunk.text
-            test_tokens = redline.test_chunk.text
+        for diff_op in self._diff_ops:
+            tag, i1, i2, j1, j2 = diff_op.opcodes
+            source_tokens = diff_op.source_chunk.text
+            test_tokens = diff_op.test_chunk.text
 
             if tag == "equal":
-                temp_str = "".join(source_tokens[i1:i2])
+                temp_str = join_equal_tokens(source_tokens, test_tokens, i1, i2, j1, j2)
                 temp_str = re.sub("¶ ", "\n\n", temp_str)
-                console_text.append(temp_str)
+                console_text.append(_strip_sentence_markers(temp_str))
             elif tag == "insert":
-                temp_str = "".join(test_tokens[j1:j2])
+                temp_str = _strip_sentence_markers("".join(test_tokens[j1:j2]))
                 splits = re.split("¶ ", temp_str)
                 for split in splits:
                     console_text.append(split, "green")
             elif tag == "delete":
-                console_text.append("".join(source_tokens[i1:i2]), "strike red")
+                console_text.append(
+                    _strip_sentence_markers("".join(source_tokens[i1:i2])), "strike red"
+                )
             elif tag == "replace":
-                console_text.append("".join(source_tokens[i1:i2]), "strike red")
-                temp_str = "".join(test_tokens[j1:j2])
+                console_text.append(
+                    _strip_sentence_markers("".join(source_tokens[i1:i2])), "strike red"
+                )
+                temp_str = _strip_sentence_markers("".join(test_tokens[j1:j2]))
                 splits = re.split("¶ ", temp_str)
                 for split in splits:
                     console_text.append(split, "green")
 
         return console_text
 
-    def compare(self, test: str | None = None, output: str = "markdown", **options):
+    def output_json(self, pretty: bool = False) -> str:
+        """
+        Return the diff as a JSON string with complete structural information.
+
+        This method provides a machine-readable representation of the diff that includes:
+        - Original source and test texts
+        - Token lists showing how the text was parsed
+        - All changes with both character and token positions
+        - Statistics about the changes
+
+        The JSON output is designed for programmatic access by AI agents, automation tools,
+        and other applications that need to process diff information.
+
+        ```python
+        from redlines import Redlines
+        import json
+
+        test = Redlines(
+            "The quick brown fox jumps over the lazy dog.",
+            "The quick brown fox walks past the lazy dog."
+        )
+
+        # Get JSON output
+        json_output = test.output_json()
+        data = json.loads(json_output)
+
+        # Access changes programmatically
+        for change in data["changes"]:
+            if change["type"] == "replace":
+                print(f"Changed '{change['source_text']}' to '{change['test_text']}'")
+
+        # Pretty-printed output
+        pretty_json = test.output_json(pretty=True)
+        ```
+
+        :param pretty: If True, format the JSON with indentation for readability. Defaults to False.
+        :type pretty: bool
+        :return: A JSON string representing the complete diff structure
+        :rtype: str
+        """
+        import json
+
+        # Get the first diff operation to access token lists
+        # All operations share the same source and test tokens
+        if not self._diff_ops:
+            # Handle edge case of empty diff (e.g., both texts are empty or whitespace-only)
+            source_tokens = []
+            test_tokens = []
+        else:
+            first_op = self._diff_ops[0]
+            source_tokens = first_op.source_chunk.text
+            test_tokens = first_op.test_chunk.text
+
+        # Don't clean tokens individually - we need to join them first then replace ¶
+        # This matches the approach in output_markdown (line 470)
+        # The pattern is: join tokens -> replace '¶ ' with '\n\n'
+        cleaned_source_tokens = source_tokens
+        cleaned_test_tokens = test_tokens
+
+        # Build changes array with both character and token positions
+        changes: list[dict[str, t.Any]] = []
+        source_char_offset = 0
+        test_char_offset = 0
+
+        for diff_op in self._diff_ops:
+            tag, i1, i2, j1, j2 = diff_op.opcodes
+
+            # Get text for this operation, following output_markdown's approach:
+            # Join tokens first, then replace paragraph markers
+            source_text = "".join(cleaned_source_tokens[i1:i2]) if i1 < i2 else ""
+            source_text = _strip_sentence_markers(re.sub("¶ ", "\n\n", source_text))
+
+            test_text = "".join(cleaned_test_tokens[j1:j2]) if j1 < j2 else ""
+            test_text = _strip_sentence_markers(re.sub("¶ ", "\n\n", test_text))
+
+            # Build change object based on operation type
+            change: dict[str, t.Any]
+            if tag == "equal":
+                change = {
+                    "type": "equal",
+                    "text": source_text,
+                    "source_position": [
+                        source_char_offset,
+                        source_char_offset + len(source_text),
+                    ],
+                    "test_position": [
+                        test_char_offset,
+                        test_char_offset + len(test_text),
+                    ],
+                    "source_token_position": [i1, i2],
+                    "test_token_position": [j1, j2],
+                }
+                source_char_offset += len(source_text)
+                test_char_offset += len(test_text)
+            elif tag == "delete":
+                change = {
+                    "type": "delete",
+                    "text": source_text,
+                    "source_position": [
+                        source_char_offset,
+                        source_char_offset + len(source_text),
+                    ],
+                    "test_position": None,
+                    "source_token_position": [i1, i2],
+                    "test_token_position": None,
+                }
+                source_char_offset += len(source_text)
+            elif tag == "insert":
+                change = {
+                    "type": "insert",
+                    "text": test_text,
+                    "source_position": None,
+                    "test_position": [
+                        test_char_offset,
+                        test_char_offset + len(test_text),
+                    ],
+                    "source_token_position": None,
+                    "test_token_position": [j1, j2],
+                }
+                test_char_offset += len(test_text)
+            elif tag == "replace":
+                change = {
+                    "type": "replace",
+                    "source_text": source_text,
+                    "test_text": test_text,
+                    "source_position": [
+                        source_char_offset,
+                        source_char_offset + len(source_text),
+                    ],
+                    "test_position": [
+                        test_char_offset,
+                        test_char_offset + len(test_text),
+                    ],
+                    "source_token_position": [i1, i2],
+                    "test_token_position": [j1, j2],
+                }
+                source_char_offset += len(source_text)
+                test_char_offset += len(test_text)
+            else:
+                continue
+
+            changes.append(change)
+
+        # Get statistics
+        stats_obj = self.stats()
+
+        # Count unchanged (equal) operations
+        unchanged_count = sum(
+            1 for diff_op in self._diff_ops if diff_op.opcodes[0] == "equal"
+        )
+
+        # Build final JSON structure
+        # Clean tokens for output by replacing paragraph markers and removing
+        # sentence markers. A bare '¦ ' token becomes '', which keeps token
+        # indices stable so the token positions in `changes` remain valid.
+        output_source_tokens = [
+            _strip_sentence_markers(token.replace("¶ ", "\n\n"))
+            for token in cleaned_source_tokens
+        ]
+        output_test_tokens = [
+            _strip_sentence_markers(token.replace("¶ ", "\n\n"))
+            for token in cleaned_test_tokens
+        ]
+
+        result = {
+            "source": self.source,
+            "test": self.test,
+            "source_tokens": output_source_tokens,
+            "test_tokens": output_test_tokens,
+            "changes": changes,
+            "stats": {
+                "deletions": stats_obj.deletions,
+                "insertions": stats_obj.insertions,
+                "replacements": stats_obj.replacements,
+                "unchanged": unchanged_count,
+                "total_changes": stats_obj.total_changes,
+                "longest_change_length": stats_obj.longest_change_length,
+                "shortest_change_length": stats_obj.shortest_change_length,
+                "average_change_length": stats_obj.average_change_length,
+                "change_ratio": stats_obj.change_ratio,
+                "chars_added": stats_obj.chars_added,
+                "chars_deleted": stats_obj.chars_deleted,
+                "chars_net_change": stats_obj.chars_net_change,
+                "levenshtein_distance": stats_obj.levenshtein_distance,
+            },
+        }
+
+        # Serialize to JSON
+        return json.dumps(result, ensure_ascii=False, indent=2 if pretty else None)
+
+    def compare(
+        self,
+        test: str | None = None,
+        output: OutputTypeLike = OutputType.MARKDOWN,
+        **options: Unpack[RedlinesOptions],
+    ) -> Text | str:
         """
         Compare `test` with `source`, and produce a delta in a format specified by `output`.
 
         :param test: Optional test string to compare. If None, uses the test string provided during initialisation.
+        :type test: str | None
         :param output: The format which the delta should be produced. Currently, "markdown" and "rich" are supported. Defaults to "markdown".
+        :type output: OutputTypeLike
+        :param options: Additional options for comparison and output formatting.
+        :type options: RedlinesOptions
         :return: The delta in the format specified by `output`.
+        :rtype: Text | str
         """
         if options:
             self.options = options
@@ -345,11 +996,27 @@ class Redlines:
                 self.test = test
         elif self._test is None:
             raise ValueError(
-                "No test string was provided when the function was called, or during initialisation."
+                "No test text provided for comparison.\n"
+                "\n"
+                "Cause: The compare() method was called without a test parameter, and no test text was set during initialization.\n"
+                "\n"
+                "To fix: Provide test text either as a parameter or during initialization:\n"
+                "  # Option 1: Pass test text to compare()\n"
+                "  redlines_obj = Redlines(source='original')\n"
+                "  result = redlines_obj.compare('modified')\n"
+                "\n"
+                "  # Option 2: Set test during initialization\n"
+                "  redlines_obj = Redlines(source='original', test='modified')\n"
+                "  result = redlines_obj.compare()\n"
+                "\n"
+                "  # Option 3: Set test property before calling compare()\n"
+                "  redlines_obj = Redlines('original')\n"
+                "  redlines_obj.test = 'modified'\n"
+                "  result = redlines_obj.compare()\n"
             )
 
-        if output == "markdown":
+        if output == OutputType.MARKDOWN:
             return self.output_markdown
-        elif output == "rich":
+        elif output == OutputType.RICH:
             return self.output_rich
         return self.output_markdown

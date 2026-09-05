@@ -1,4 +1,4 @@
-# Contributing to CONTRIBUTING.md
+# Contributing to redlines
 
 First off, thanks for taking the time to contribute! ❤️
 
@@ -149,8 +149,76 @@ Be relaxed and open to comments. We are all here to learn and grow together.
 The Documentation is contained in the python source files as docstrings. Edit them directly. Please be clear, concise
 and respectful in your tone.
 
-To preview documentation, you can clone the project, install development dependencies, and then run `pdoc redlines` to
-see your changes.
+To preview documentation, clone the project, install the development dependencies, then run `npm install && npm run dev`
+in `site/` — the dev server regenerates the API reference from your docstrings before it starts.
+
+## Documentation
+
+Documentation is published from `site/`, an Astro Starlight project that serves
+the hand-written pages and, under `/api/`, the API reference that `pdoc`
+generates from docstrings. See
+[ADR-0026](docs/adr/0026-docs-site-on-astro-starlight.md) for why, and
+[ADR-0027](docs/adr/0027-agent-docs-machine-surface.md) for the shape of the
+agent-facing pages.
+
+### How It Works
+- The site deploys **on every push to `main`**, and again when a release is
+  published. A documentation fix does not have to wait for a release; the
+  consequence is that `/api/` documents `main` rather than the last tag.
+- Every pull request builds the site without deploying it, so a release is
+  never the first time the site is built.
+- **A broken site never blocks a release.** The website workflow is separate
+  from the packaging workflows, nothing depends on it, and it must not be made
+  a required status check.
+
+### To Update Documentation
+- **API reference:** edit the docstrings in `redlines/`. They remain the source
+  of truth; `pdoc` renders them and nothing under `site/public/api/` should be
+  edited by hand — it is generated and not committed.
+- **Everything else:** edit the pages under `site/src/content/docs/`.
+
+### Docstring conventions
+
+Two conventions, both there for the same reason: the API reference generator is
+expected to change at M4, and these keep that a configuration change rather than
+a rewrite of every docstring written between now and then.
+
+- **Write docstrings in reST style** — `:param name:`, `:type name:`,
+  `:return:`, `:rtype:` — which is what the package already uses throughout.
+  Do not mix in Google or numpy sections. Both pdoc and `griffe`, the extractor
+  every plausible successor is built on, read reST; a mixed codebase means one
+  of them renders half the parameters as literal text.
+- **Do not add `@private` to a docstring.** It is a pdoc-specific pragma that no
+  other generator recognises: under `griffe` the member reappears in the
+  reference with a literal `@private` line in its body. To keep something out of
+  the published reference, use `__all__`, or raise it in the pull request so the
+  module can be excluded by configuration. The nine existing pragmas in
+  `redlines/cli.py` are doing a real job for pdoc today and stay until the
+  generator changes; the rule is about not adding a tenth.
+
+### Building the site locally
+
+```bash
+cd site
+npm install
+npm run dev      # runs pdoc first, then serves on http://localhost:4321/redlines/
+```
+
+`npm run build` does the same for a production build, and `npm run api`
+regenerates only the pdoc output. All three need the Python development
+environment (`uv sync --all-extras --dev`) available in the repository root.
+
+### Written documentation
+
+Not everything belongs in a docstring. `docs/` holds the documents that are
+written by hand rather than generated:
+
+- `docs/adr/` — architecture decision records: why a design choice was made,
+  what was rejected, and when to revisit it. Adding a decision means adding a
+  file here; see [docs/adr/README.md](docs/adr/README.md) for the conventions.
+- `docs/PRD.md` — what redlines 1.0 is and who it is for.
+- `docs/competitive-landscape-2026-08.md` — the survey the 1.0 decisions rest on.
+- `ROADMAP.md` — which release each feature lands in.
 
 ## Styleguides
 

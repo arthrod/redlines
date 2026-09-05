@@ -4,10 +4,32 @@
 name: Python package
 
 on:
+  # Only main: work on a branch is covered by its pull request, so pushing to a
+  # branch with an open PR would otherwise run the whole matrix twice.
   push:
-    branches: [ "main" ]
+    branches: [ main ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE.txt'
+      - '*.png'
+      - '.github/workflows/docs.yml'
   pull_request:
-    branches: [ "main" ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE.txt'
+      - '*.png'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+# A new push to the same branch makes the run in progress redundant. Grouping
+# by branch name rather than github.ref keeps a pull_request run and a push run
+# for one branch in the same group. Runs on main are left to finish, so every
+# commit there keeps its own result.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   build:
@@ -16,22 +38,53 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: [ "3.8", "3.9", "3.10", "3.11", "3.12" ]
+        python-version: [ "3.10", "3.11", "3.12", "3.13", "3.14" ]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v10.0.1
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
-      - name: Install the project
+      - name: Install the project (with nupunkt for Python 3.11+)
+        if: ${{ matrix.python-version != '3.10' }}
         run: uv sync --all-extras --dev
+      - name: Install the project (without nupunkt for Python 3.10)
+        if: ${{ matrix.python-version == '3.10' }}
+        run: uv sync --dev
+      - name: Type check with mypy
+        run: |
+          uv run mypy redlines tests
       - name: Test with pytest
         run: |
-          source .venv/bin/activate
           uv run pytest
+
+  pyodide:
+    # Blocking: the wheel must import under Pyodide (WASM CPython) so that
+    # nothing in the browser-facing surface grows a dependency the browser
+    # cannot load (ADR-0019, PRD N5, issue #109).
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pyodide npm package (pinned)
+        working-directory: .github/scripts
+        run: npm ci
+      - name: Build wheel
+        run: uv build --wheel --out-dir dist
+      - name: Import redlines under Pyodide
+        run: node .github/scripts/pyodide_check.mjs dist/redlines-*.whl

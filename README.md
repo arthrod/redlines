@@ -5,97 +5,137 @@
 ![GitHub last commit (by committer)](https://img.shields.io/github/last-commit/houfu/redlines)
 ![PyPI - License](https://img.shields.io/pypi/l/redlines)
 
-`Redlines` produces a text showing the differences between two strings/text. The changes are represented with
-strike-throughs and underlines, which looks similar to Microsoft Word's track changes. This method of showing changes is
-more familiar to lawyers and is more compact for long series of characters.
+`Redlines` compares two strings/text and produces structured output showing their differences. Changes are represented with strike-throughs and highlights, similar to Microsoft Word's track changes. The output includes detailed change information, positions, and statistics for programmatic use.
 
-Redlines uses [SequenceMatcher](https://docs.python.org/3/library/difflib.html#difflib.SequenceMatcher)
-to find differences between words used.
-The output can be in HTML, Markdown, or `rich` format.
+Supports multiple output formats: **JSON** (default, with structured change data and statistics), **Markdown**, **HTML**, and **rich** (terminal display).
 
-## Example
+## Quick Start
 
-Given an original string:
-
-    The quick brown fox jumps over the lazy dog.
-
-And the string to be tested with:
-
-    The quick brown fox walks past the lazy dog.
-
-The library gives a result of:
-
-    The quick brown fox <del>jumps over </del><ins>walks past </ins>the lazy dog.
-
-Which is rendered like this:
-
-> The quick brown fox <del>jumps over </del><ins>walks past </ins>the lazy dog.
-
-The library can also output the results in Markdown, HTML or `rich` format, and
-for a variety of environments like Streamlit, Jupyter Notebooks, Google Colab and the terminal.
-
-## Install
-
-```shell
+```bash
+# Install
 pip install redlines
+
+# CLI: Compare two texts (outputs JSON by default)
+redlines "The quick brown fox jumps over the lazy dog." "The quick brown fox walks past the lazy dog."
+
+# Python: Compare and get markdown
+from redlines import Redlines
+test = Redlines(
+    "The quick brown fox jumps over the lazy dog.",
+    "The quick brown fox walks past the lazy dog.",
+    markdown_style="none"
+)
+print(test.output_markdown)
+# Output: The quick brown fox <del>jumps over </del><ins>walks past </ins>the lazy dog.
 ```
+
+**Supported:** Python 3.10 - 3.14 (Python 3.8 and 3.9 support dropped)
+
+**Optional dependencies:**
+- `pip install redlines[pdf]` for PDF file comparison
+- `pip install redlines[nupunkt]` for advanced sentence boundary detection (Python 3.11+, handles abbreviations, citations, URLs)
+- `pip install redlines[levenshtein]` for additional statistics
 
 ## Usage
 
+### Python API
+
 The library contains one class: `Redlines`, which is used to compare text.
 
+**Basic comparison:**
 ```python
 from redlines import Redlines
 
 test = Redlines(
     "The quick brown fox jumps over the lazy dog.",
-  "The quick brown fox walks past the lazy dog.", markdown_style="none",
+    "The quick brown fox walks past the lazy dog.",
+    markdown_style="none"
 )
 assert (
-        test.output_markdown
-        == "The quick brown fox <del>jumps over </del><ins>walks past </ins>the lazy dog."
+    test.output_markdown
+    == "The quick brown fox <del>jumps over </del><ins>walks past </ins>the lazy dog."
 )
 ```
 
-Alternatively, you can create Redline with the text to be tested, and compare several times to see the results.
-
+**Multiple comparisons with one source:**
 ```python
 from redlines import Redlines
 
 test = Redlines("The quick brown fox jumps over the lazy dog.", markdown_style="none")
 assert (
-        test.compare("The quick brown fox walks past the lazy dog.")
-        == "The quick brown fox <del>jumps over </del><ins>walks past </ins>the lazy dog."
+    test.compare("The quick brown fox walks past the lazy dog.")
+    == "The quick brown fox <del>jumps over </del><ins>walks past </ins>the lazy dog."
 )
 
 assert (
-        test.compare("The quick brown fox jumps over the dog.")
-        == "The quick brown fox jumps over the <del>lazy </del>dog."
+    test.compare("The quick brown fox jumps over the dog.")
+    == "The quick brown fox jumps over the <del>lazy </del>dog."
 )
 ```
 
-Redlines also features a simple command line tool `redlines` to visualise the differences in text in the terminal.
+**JSON output with structured data:**
+```python
+from redlines import Redlines
 
+test = Redlines(
+    "The quick brown fox jumps over the lazy dog.",
+    "The quick brown fox walks past the lazy dog."
+)
+
+# Get JSON with changes, positions, and statistics
+print(test.output_json(pretty=True))
 ```
- Usage: redlines text [OPTIONS] SOURCE TEST                                                                                                                                                                                                   
-                                                                                                                                                                                                                                              
- Compares the strings SOURCE and TEST and produce a redline in the terminal. 
+
+### CLI
+
+**Basic usage (outputs JSON by default):**
+```bash
+redlines "old text" "new text"
+redlines file1.txt file2.txt --pretty
 ```
 
-You may also want to check out the demo project [redlines-textual](https://github.com/houfu/redlines-textual).
+**Output formats:**
+```bash
+redlines text "source" "test"              # Rich terminal display
+redlines markdown file1.txt file2.txt      # Markdown output
+redlines stats old.txt new.txt             # Statistics only
+```
 
-## Documentation
+Run `redlines --help` or `redlines guide` for the [Agent Integration Guide](AGENT_GUIDE.md). See also: [redlines-textual](https://github.com/houfu/redlines-textual).
 
-[Read the available Documentation](https://houfu.github.io/redlines).
+## Advanced Features
 
-## Uses
+### Custom Processors
 
+Use `NupunktProcessor` for sentence-level tokenization with intelligent boundary detection:
+
+```python
+from redlines import Redlines
+from redlines.processor import NupunktProcessor
+
+processor = NupunktProcessor()
+test = Redlines("Dr. Smith said hello.", "Dr. Smith said hi.", processor=processor)
+```
+
+Sentence mode preserves the input's paragraph boundaries (fixed in 0.6.2): sentences are anchored within their paragraph, so the output is not reflowed one sentence per paragraph.
+
+**Use NupunktProcessor for:** Legal/technical documents with abbreviations, URLs, citations, decimals
+**Use WholeDocumentProcessor (default) for:** Simple documents, speed-critical tasks (5-6x faster), paragraph-level granularity
+
+See [demo comparison](demo/README.md) for benchmarks.
+
+### For AI Agents & Automation
+
+**🤖 Using with AI coding agents?** See the **[Agent Integration Guide](https://houfu.github.io/redlines/guides/agent-guide/)** for JSON schemas, automation patterns, error handling, and [runnable examples](examples/). Agents fetching documentation as text can start at [llms.txt](https://houfu.github.io/redlines/llms.txt).
+
+## Documentation & Resources
+
+**Full Documentation:** [https://houfu.github.io/redlines](https://houfu.github.io/redlines)
+
+**Example Use Cases:**
 * View and mark changes in legislation: [PLUS Explorer](https://houfu-plus-explorer.streamlit.app/)
-* Visualise changes after ChatGPT transforms a
-  text: [ChatGPT Prompt Engineering for Developers](https://www.deeplearning.ai/short-courses/chatgpt-prompt-engineering-for-developers/)
-  Lesson 6
+* Visualise changes after ChatGPT transforms a text: [ChatGPT Prompt Engineering for Developers](https://www.deeplearning.ai/short-courses/chatgpt-prompt-engineering-for-developers/) Lesson 6
 
 ## License
 
 MIT License
-
